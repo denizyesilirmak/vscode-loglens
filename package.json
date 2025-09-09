@@ -1,0 +1,66 @@
+{
+  "name": "loglens",
+  "displayName": "loglens",
+  "publisher": "denizyesilirmak",
+  "description": "View Android adb logcat and iOS Simulator logs side-by-side directly inside VS Code. Filter, color-highlight, and manage device logs without leaving your editor.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "loglensPanelContainer",
+          "title": "Mobile Logs",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "loglensPanelContainer": [
+        {
+          "id": "mobileLogs_adb",
+          "name": "Android Logs",
+          "type": "webview",
+          "icon": "media/icon.svg"
+        },
+        {
+          "id": "mobileLogs_ios",
+          "name": "iOS Logs",
+          "type": "webview",
+          "icon": "media/icon.svg"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.103.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5",
+    "ts-loader": "^9.5.1",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4",
+    "@vscode/test-cli": "^0.0.9",
+    "@vscode/test-electron": "^2.4.0"
+  }
+}
