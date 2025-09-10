@@ -1,0 +1,24 @@
+.logcat-container {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-top: none;
+    background-color: var(--background-secondary);
+    color: var(--text-primary);
+    overflow-y: auto;
+}
+
+.logcat-container .level-error{
+    background-color: rgba(255, 0, 0, 0.08) !important;
+}
+
+.logcat-container .level-warn{
+    background-color: rgba(255, 165, 0, 0.08) !important;
+}
+
+.logcat-container .level-info{
+    background-color: rgba(0, 0, 255, 0.00) !important;
+}
+
+.logcat-container .level-debug{
+    background-color: rgba(0, 255, 0, 0.08) !important;
+}

@@ -1,0 +1,67 @@
+/* webview/src/app.css (ya da App.tsx inline style yerine burada) */
+:root {
+  --bg: var(--vscode-editor-background);
+  --fg: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+
+  --card: var(--vscode-editorWidget-background);   /* panel/kutu zemin */
+  --border: var(--vscode-panel-border);
+
+  --link: var(--vscode-textLink-foreground);
+
+  --btn-bg: var(--vscode-button-background);
+  --btn-fg: var(--vscode-button-foreground);
+  --btn-hover-bg: var(--vscode-button-hoverBackground);
+
+  --input-bg: var(--vscode-input-background);
+  --input-fg: var(--vscode-input-foreground);
+  --input-border: var(--vscode-input-border);
+
+  --focus: var(--vscode-focusBorder);
+  --font: var(--vscode-font-family);
+  --font-size: var(--vscode-font-size);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--font-size)/1.45 var(--font);
+  margin: 0;
+}
+
+a { color: var(--link); }
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { background: var(--btn-hover-bg); }
+button:focus { outline: 1px solid var(--focus); outline-offset: 1px; }
+
+input, select {
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+input:focus, select:focus { outline: 1px solid var(--focus); outline-offset: 1px; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 6px; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; background: color-mix(in srgb, var(--card), var(--fg) 4%); }

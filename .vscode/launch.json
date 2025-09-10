@@ -15,7 +15,11 @@
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js"
 			],
-			"preLaunchTask": "${defaultBuildTask}"
+			"preLaunchTask": "${defaultBuildTask}",
+			      "env": {
+       				 "VITE_DEV_SERVER_URL": "http://127.0.0.1:5173",
+       				 "NODE_ENV": "development"
+     		 }
 		}
 	]
 }
