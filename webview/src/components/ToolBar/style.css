@@ -1,0 +1,39 @@
+.toolbar-container {
+    display: flex;
+    flex-direction: row;
+    height: 24px;
+    background-color: var(--card);
+    align-items: center;
+    flex-direction: row-reverse;
+    padding: 0 10px;
+    gap: 4px;
+}
+
+.toolbar-button {
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+}
+
+.toolbar-button:hover {
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-fg);
+}
+
+.toolbar-button .icon-container {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toolbar-button .label {
+    font-size: 12px;
+    color: var(--text-color);
+}

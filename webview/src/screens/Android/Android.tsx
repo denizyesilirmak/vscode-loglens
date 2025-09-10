@@ -3,6 +3,8 @@ import LogCat from '../../components/Logcat';
 import Select from '../../components/Select';
 import { useAdb } from '../../store/adbStore';
 import './style.css';
+import { nativeLog } from '../../utils/log';
+import ToolBar from '../../components/ToolBar';
 
 const AndroidScreen = () => {
   const { devices, refreshDevices } = useAdb();
@@ -17,6 +19,14 @@ const AndroidScreen = () => {
     refreshDevices();
   }, [refreshDevices]);
 
+  const handleApply = () => {
+    if (!options.device) {
+      nativeLog('Please select a device before applying filters.');
+      return;
+    }
+    nativeLog(`Applied filters: ${JSON.stringify(options)}`);
+  };
+
   return (
     <div className="android-screen">
       <div className="bar">
@@ -29,6 +39,7 @@ const AndroidScreen = () => {
               console.log('Selected device:', value);
               setOptions((prev) => ({ ...prev, device: value }));
             }}
+            placeholder="Select Device"
           />
           <button className="refresh-button" onClick={refreshDevices}>
             ⟳
@@ -67,10 +78,13 @@ const AndroidScreen = () => {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          <button className="refresh-button">Apply</button>
+          <button className="refresh-button" onClick={handleApply}>
+            Apply
+          </button>
         </div>
       </div>
       <LogCat />
+      <ToolBar />
     </div>
   );
 };

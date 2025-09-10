@@ -11,6 +11,7 @@ import {
   getXcodePath,
   getXcodeVersion,
   getBootedSimulators,
+  adbKillServer,
 } from './utils/device';
 
 export type WebviewRequest =
@@ -24,7 +25,9 @@ export type WebviewRequest =
   | { type: 'GET_XCODE_PATH' }
   | { type: 'GET_XCODE_VERSION' }
   | { type: 'GET_BOOTED_SIMULATORS' }
-  | { type: 'GET_CURRENT_PANEL' };
+  | { type: 'GET_CURRENT_PANEL' }
+  | { type: 'NATIVE_LOG'; message: string }
+  | { type: 'ADB_KILL_SERVER' };
 
 export interface AndroidEnv {
   installed: boolean;
@@ -183,6 +186,20 @@ class MobileLogsProvider implements vscode.WebviewViewProvider {
             webview.postMessage({
               panel: panel,
             });
+            break;
+          }
+          case 'NATIVE_LOG': {
+            console.log(`[WEBVIEW][${this.viewId}]`, msg.message);
+            vscode.window.showInformationMessage(msg.message);
+            break;
+          }
+          case 'ADB_KILL_SERVER': {
+            const success = await adbKillServer();
+            if (success) {
+              vscode.window.showInformationMessage('ADB server killed successfully.');
+            } else {
+              vscode.window.showErrorMessage('Failed to kill ADB server.');
+            }
             break;
           }
         }

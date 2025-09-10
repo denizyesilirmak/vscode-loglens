@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Select from '../../components/Select';
 import './style.css';
 import { useIos } from '../../store/iosStore';
+import SimulatorLogs from '../../components/SimulatorLogs';
 
 const IosScreen = () => {
   const [options, setOptions] = useState({
@@ -45,6 +46,7 @@ const IosScreen = () => {
           <button className="refresh-button">Apply</button>
         </div>
       </div>
+      <SimulatorLogs />
     </div>
   );
 };

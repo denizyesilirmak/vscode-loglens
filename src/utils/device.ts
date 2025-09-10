@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { exec, execSync } from 'child_process';
 import * as os from 'os';
 
 export type Platform = 'darwin' | 'win32' | 'linux';
@@ -319,4 +319,23 @@ function resolveEmulatorBinary(): string | null {
     }
   }
   return null;
+}
+
+/**
+ * ADB Kill Server
+ * description: Kills the ADB (Android Debug Bridge) server if it is running.
+ * This can be useful to reset the ADB connection or resolve issues with connected devices.
+ */
+export async function adbKillServer(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const bin = getAdbPath() ?? 'adb';
+    exec(`"${bin}" kill-server`, (error) => {
+      if (error) {
+        console.error('Failed to kill ADB server:', error);
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
 }
