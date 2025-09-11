@@ -5,9 +5,12 @@ import { useAdb } from '../../store/adbStore';
 import './style.css';
 import { nativeLog } from '../../utils/log';
 import ToolBar from '../../components/ToolBar';
+import { useLogcat } from '../../store/logcatStore';
 
 const AndroidScreen = () => {
   const { devices, refreshDevices } = useAdb();
+  const { startLogcat, stopLogcat, logs, clearLogs } = useLogcat();
+
   const [options, setOptions] = useState({
     device: '',
     level: 'verbose',
@@ -25,7 +28,11 @@ const AndroidScreen = () => {
       return;
     }
     nativeLog(`Applied filters: ${JSON.stringify(options)}`);
+
+    startLogcat(options);
   };
+
+  console.log('Current logs:', logs);
 
   return (
     <div className="android-screen">
@@ -83,7 +90,7 @@ const AndroidScreen = () => {
           </button>
         </div>
       </div>
-      <LogCat />
+      <LogCat logs={logs} keyword={keyword} />
       <ToolBar />
     </div>
   );

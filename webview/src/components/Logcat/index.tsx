@@ -1,15 +1,19 @@
-import { dummyLogs } from './mock';
+import { format } from 'date-fns';
 import './style.css';
 
 const columns = [
-  { name: 'Time', width: '15%' },
-  { name: 'PID', width: '7%' },
-  { name: 'TID', width: '7%' },
-  { name: 'Tag', width: '20%' },
-  { name: 'Message', width: '44%' },
+  { name: 'Time', width: '6%' },
+  { name: 'PID', width: '6%' },
+  { name: 'Tag', width: '6%' },
+  { name: 'Message', width: 'fit-content' },
 ];
 
-const LogCat = () => {
+const shortenText = (text: string, maxLength: number) => {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+};
+
+const LogCat = ({ logs, keyword }: { logs?: any[]; keyword?: string }) => {
   return (
     <div className="logcat-container">
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -23,6 +27,7 @@ const LogCat = () => {
                   textAlign: 'left',
                   borderBottom: '1px solid var(--border)',
                   padding: '8px',
+                  textOverflow: 'ellipsis',
                 }}
               >
                 {col.name}
@@ -31,13 +36,12 @@ const LogCat = () => {
           </tr>
         </thead>
         <tbody>
-          {dummyLogs.map((log, index) => (
+          {logs?.map((log, index) => (
             <tr className={`level-${log.level}`} key={index}>
-              <td style={{ padding: '8px' }}>{log.time}</td>
-              <td style={{ padding: '8px' }}>{log.pid}</td>
-              <td style={{ padding: '8px' }}>{log.tid}</td>
-              <td style={{ padding: '8px' }}>{log.tag}</td>
-              <td style={{ padding: '8px' }}>{log.message}</td>
+              <td style={{ padding: '8px' }}>{format(new Date(log.Time), 'HH:mm:ss')}</td>
+              <td style={{ padding: '8px' }}>{shortenText(log.PID, 10)}</td>
+              <td style={{ padding: '8px' }}>{shortenText(log.Tag, 15)}</td>
+              <td style={{ padding: '8px' }}>{shortenText(log.Message, 300)}</td>
             </tr>
           ))}
         </tbody>

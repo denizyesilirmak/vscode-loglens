@@ -1,8 +1,11 @@
-import { exec, execSync } from 'child_process';
+import { exec, execSync, spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as os from 'os';
 
 export type Platform = 'darwin' | 'win32' | 'linux';
 const PLAT = process.platform as Platform;
+
+let currentLogcat: ChildProcessWithoutNullStreams | null = null;
+let lineBuf = '';
 
 export interface AdbDevice {
   id: string;
@@ -338,4 +341,167 @@ export async function adbKillServer(): Promise<boolean> {
       }
     });
   });
+}
+
+/**
+ * ADB Stop
+ * description: Stops the ADB (Android Debug Bridge) server if it is running.
+ */
+export function adbStopLogcat(webview?: any): void {
+  try {
+    const p = currentLogcat;
+    currentLogcat = null;
+
+    if (p && !p.killed) {
+      try {
+        p.kill();
+      } catch {}
+      setTimeout(() => {
+        if (p && !p.killed) killProcessHard(p);
+      }, 600);
+    }
+  } finally {
+    lineBuf = '';
+    try {
+      webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
+    } catch {}
+  }
+}
+
+/**
+ * ADB Start Logcat with options
+ * UI event’leri:
+ *  - { type: 'ADB_LOGCAT_STARTED', device, buffers, level }
+ *  - { type: 'ADB_LOG', line }
+ *  - { type: 'ADB_LOG_ERROR', error }
+ *  - { type: 'ADB_LOGCAT_EXIT', code, signal }
+ */
+export function adbStartLogcat(
+  webview: any,
+  options: { device: string; level: string; buffer: string },
+): void {
+  // varsa eski stream'i kapat (UI'a STOPPED düşsün istiyorsan webview'i geçir)
+  adbStopLogcat(webview);
+
+  const binPath = getAdbPath() ?? 'adb';
+  const prio = toPriorityLetter(options.level);
+  const buffers = normalizeBuffers(options.buffer);
+
+  const args: string[] = ['-s', options.device, 'logcat'];
+  for (const b of buffers) args.push('-b', b);
+  args.push('-v', 'time', `*:${prio}`);
+
+  console.log('Starting ADB logcat with args:', [binPath, ...args].join(' '));
+
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    // ⚠️ burada "const child = ..." demiyoruz; var olan değişkene atıyoruz
+    child = spawn(binPath, args); // stdio belirtmeyince tipi ChildProcessWithoutNullStreams olur
+  } catch (err) {
+    console.error('Failed to spawn adb logcat:', err);
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
+    return;
+  }
+
+  currentLogcat = child;
+
+  // UI’a started
+  try {
+    webview.postMessage({
+      type: 'ADB_LOGCAT_STARTED',
+      device: options.device,
+      buffers,
+      level: prio,
+    });
+  } catch {
+    console.error('Failed to send ADB_LOGCAT_STARTED message');
+  }
+
+  // stdout -> line by line
+  child.stdout.on('data', (chunk: Buffer) => {
+    lineBuf += chunk.toString('utf8');
+    const lines = lineBuf.split(/\r?\n/);
+    lineBuf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        webview.postMessage({ type: 'ADB_LOG', line });
+      } catch {
+        console.error('Failed to send ADB_LOG message:', line);
+      }
+    }
+  });
+
+  // stderr -> error
+  child.stderr.on('data', (chunk: Buffer) => {
+    const msg = chunk.toString('utf8');
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: msg });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', msg);
+    }
+  });
+
+  child.on('error', (err) => {
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
+  });
+
+  child.on('close', (code, signal) => {
+    try {
+      webview.postMessage({ type: 'ADB_LOGCAT_EXIT', code, signal });
+    } catch {
+      console.error('Failed to send ADB_LOGCAT_EXIT message:', code, signal);
+    }
+    if (currentLogcat === child) {
+      currentLogcat = null;
+      lineBuf = '';
+    }
+  });
+}
+
+function toPriorityLetter(level: string): 'V' | 'D' | 'I' | 'W' | 'E' | 'F' | 'S' {
+  const l = (level || '').trim().toLowerCase();
+  if (l.startsWith('v')) return 'V';
+  if (l.startsWith('d')) return 'D';
+  if (l.startsWith('i')) return 'I';
+  if (l.startsWith('w')) return 'W';
+  if (l.startsWith('e')) return 'E';
+  if (l.startsWith('f') || l.startsWith('a')) return 'F';
+  if (l.startsWith('s')) return 'S';
+  return 'V';
+}
+
+function normalizeBuffers(buffer: string): string[] {
+  const allowed = new Set(['main', 'system', 'events', 'radio', 'crash', 'all', 'default']);
+  const raw = (buffer || 'main')
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!raw.length) return ['main'];
+  if (raw.includes('all')) return ['all']; // -b all her şeyi kapsar
+  return raw.filter((b) => allowed.has(b)).length ? raw.filter((b) => allowed.has(b)) : ['main'];
+}
+
+function killProcessHard(p: ChildProcessWithoutNullStreams) {
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/PID', String(p.pid), '/T', '/F']);
+    } catch {
+      console.warn('taskkill failed, trying SIGKILL');
+    }
+  } else {
+    try {
+      p.kill('SIGKILL');
+    } catch {
+      console.warn('SIGKILL failed');
+    }
+  }
 }
