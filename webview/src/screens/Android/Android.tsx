@@ -9,7 +9,7 @@ import { useLogcat } from '../../store/logcatStore';
 
 const AndroidScreen = () => {
   const { devices, refreshDevices } = useAdb();
-  const { startLogcat, stopLogcat, logs, clearLogs } = useLogcat();
+  const { startLogcat, stopLogcat, logs, clearLogs, running, loading } = useLogcat();
 
   const [options, setOptions] = useState({
     device: '',
@@ -30,6 +30,11 @@ const AndroidScreen = () => {
     nativeLog(`Applied filters: ${JSON.stringify(options)}`);
 
     startLogcat(options);
+  };
+
+  const handleStop = () => {
+    nativeLog('Stopping Android logcat stream...');
+    stopLogcat();
   };
 
   console.log('Current logs:', logs);
@@ -85,8 +90,17 @@ const AndroidScreen = () => {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          <button className="refresh-button" onClick={handleApply}>
-            Apply
+          {!running ? (
+            <button className="refresh-button" onClick={handleApply} disabled={loading}>
+              {loading ? 'Starting...' : 'Apply'}
+            </button>
+          ) : (
+            <button className="refresh-button" onClick={handleStop}>
+              Stop
+            </button>
+          )}
+          <button className="refresh-button" onClick={clearLogs} disabled={logs.length === 0}>
+            Clear
           </button>
         </div>
       </div>

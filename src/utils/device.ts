@@ -5,7 +5,9 @@ export type Platform = 'darwin' | 'win32' | 'linux';
 const PLAT = process.platform as Platform;
 
 let currentLogcat: ChildProcessWithoutNullStreams | null = null;
+let currentSimulatorLog: ChildProcessWithoutNullStreams | null = null;
 let lineBuf = '';
+let iosLineBuf = '';
 
 export interface AdbDevice {
   id: string;
@@ -348,24 +350,56 @@ export async function adbKillServer(): Promise<boolean> {
  * description: Stops the ADB (Android Debug Bridge) server if it is running.
  */
 export function adbStopLogcat(webview?: any): void {
-  try {
-    const p = currentLogcat;
-    currentLogcat = null;
-
-    if (p && !p.killed) {
-      try {
-        p.kill();
-      } catch {}
-      setTimeout(() => {
-        if (p && !p.killed) killProcessHard(p);
-      }, 600);
-    }
-  } finally {
-    lineBuf = '';
+  console.log('adbStopLogcat called');
+  const p = currentLogcat;
+  if (!p || p.killed) {
+    // Already stopped or no process running
+    console.log('No process running or already killed');
     try {
       webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
     } catch {}
+    return;
   }
+
+  console.log('Process exists, attempting to kill PID:', p.pid);
+
+  currentLogcat = null;
+  lineBuf = '';
+
+  // Set up a listener for when the process actually closes
+  const handleClose = () => {
+    console.log('Process closed naturally, sending ADB_LOGCAT_STOPPED');
+    try {
+      webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
+    } catch {}
+  };
+
+  // If process closes naturally, send stopped message
+  p.once('close', handleClose);
+
+  try {
+    console.log('Attempting to kill process with SIGTERM');
+    p.kill();
+  } catch (err) {
+    console.error('Failed to kill process:', err);
+  }
+
+  // Fallback: force kill after timeout and send message
+  setTimeout(() => {
+    if (p && !p.killed) {
+      console.log('Process still running after 600ms, force killing');
+      killProcessHard(p);
+      // Remove the close listener since we're force killing
+      p.removeListener('close', handleClose);
+      try {
+        webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
+      } catch {
+        console.error('Failed to send ADB_LOGCAT_STOPPED message after force kill');
+      }
+    } else {
+      console.log('Process was killed successfully within 600ms');
+    }
+  }, 600);
 }
 
 /**
@@ -380,7 +414,6 @@ export function adbStartLogcat(
   webview: any,
   options: { device: string; level: string; buffer: string },
 ): void {
-  // varsa eski stream'i kapat (UI'a STOPPED düşsün istiyorsan webview'i geçir)
   adbStopLogcat(webview);
 
   const binPath = getAdbPath() ?? 'adb';
@@ -396,7 +429,9 @@ export function adbStartLogcat(
   let child: ChildProcessWithoutNullStreams;
   try {
     // ⚠️ burada "const child = ..." demiyoruz; var olan değişkene atıyoruz
-    child = spawn(binPath, args); // stdio belirtmeyince tipi ChildProcessWithoutNullStreams olur
+    child = spawn(binPath, args, {
+      detached: false, // Don't detach from parent process
+    }); // stdio belirtmeyince tipi ChildProcessWithoutNullStreams olur
   } catch (err) {
     console.error('Failed to spawn adb logcat:', err);
     try {
@@ -504,4 +539,165 @@ function killProcessHard(p: ChildProcessWithoutNullStreams) {
       console.warn('SIGKILL failed');
     }
   }
+}
+
+/**
+ * iOS Simulator Log Stop
+ * description: Stops the iOS simulator log stream if it is running.
+ */
+export function simulatorStopLog(webview?: any): void {
+  const p = currentSimulatorLog;
+  if (!p || p.killed) {
+    // Already stopped or no process running
+    try {
+      webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
+    } catch {}
+    return;
+  }
+
+  currentSimulatorLog = null;
+  iosLineBuf = '';
+
+  // Set up a listener for when the process actually closes
+  const handleClose = () => {
+    try {
+      webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
+    } catch {}
+  };
+
+  // If process closes naturally, send stopped message
+  p.once('close', handleClose);
+
+  try {
+    p.kill();
+  } catch {}
+
+  // Fallback: force kill after timeout and send message
+  setTimeout(() => {
+    if (p && !p.killed) {
+      killProcessHard(p);
+      // Remove the close listener since we're force killing
+      p.removeListener('close', handleClose);
+      try {
+        webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
+      } catch {}
+    }
+  }, 600);
+}
+
+/**
+ * iOS Simulator Log Start with options
+ * UI events:
+ *  - { type: 'IOS_LOG_STARTED', device, appName }
+ *  - { type: 'IOS_LOG', line }
+ *  - { type: 'IOS_LOG_ERROR', error }
+ *  - { type: 'IOS_LOG_EXIT', code, signal }
+ */
+export function simulatorStartLog(
+  webview: any,
+  options: { device: string; appName?: string },
+): void {
+  // Stop existing stream
+  simulatorStopLog(webview);
+
+  if (PLAT !== 'darwin') {
+    try {
+      webview.postMessage({
+        type: 'IOS_LOG_ERROR',
+        error: 'iOS simulator logging is only supported on macOS',
+      });
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  const { device: udid, appName } = options;
+
+  // Build the xcrun simctl log stream command
+  const args = ['simctl', 'spawn', udid, 'log', 'stream'];
+
+  // Add predicate filter if app name is provided
+  if (appName && appName.trim()) {
+    args.push('--predicate', `process == "${appName.trim()}"`);
+  }
+
+  console.log('Starting iOS simulator log with args:', ['xcrun', ...args].join(' '));
+
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    child = spawn('xcrun', args);
+  } catch (err) {
+    console.error('Failed to spawn xcrun simctl log:', err);
+    try {
+      webview.postMessage({
+        type: 'IOS_LOG_ERROR',
+        error: String((err as Error)?.message ?? err),
+      });
+    } catch {
+      console.error('Failed to send IOS_LOG_ERROR message:', err);
+    }
+    return;
+  }
+
+  currentSimulatorLog = child;
+
+  // Send started message to UI
+  try {
+    webview.postMessage({
+      type: 'IOS_LOG_STARTED',
+      device: udid,
+      appName: appName || 'All processes',
+    });
+  } catch {
+    console.error('Failed to send IOS_LOG_STARTED message');
+  }
+
+  // Handle stdout - line by line
+  child.stdout.on('data', (chunk: Buffer) => {
+    iosLineBuf += chunk.toString('utf8');
+    const lines = iosLineBuf.split(/\r?\n/);
+    iosLineBuf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        webview.postMessage({ type: 'IOS_LOG', line });
+      } catch {
+        console.error('Failed to send IOS_LOG message:', line);
+      }
+    }
+  });
+
+  // Handle stderr - errors
+  child.stderr.on('data', (chunk: Buffer) => {
+    const msg = chunk.toString('utf8');
+    try {
+      webview.postMessage({ type: 'IOS_LOG_ERROR', error: msg });
+    } catch {
+      console.error('Failed to send IOS_LOG_ERROR message:', msg);
+    }
+  });
+
+  child.on('error', (err) => {
+    try {
+      webview.postMessage({
+        type: 'IOS_LOG_ERROR',
+        error: String((err as Error)?.message ?? err),
+      });
+    } catch {
+      console.error('Failed to send IOS_LOG_ERROR message:', err);
+    }
+  });
+
+  child.on('close', (code, signal) => {
+    try {
+      webview.postMessage({ type: 'IOS_LOG_EXIT', code, signal });
+    } catch {
+      console.error('Failed to send IOS_LOG_EXIT message:', code, signal);
+    }
+    if (currentSimulatorLog === child) {
+      currentSimulatorLog = null;
+      iosLineBuf = '';
+    }
+  });
 }

@@ -1,24 +1,23 @@
-// useLogcatStore.ts
+// useIosLogStore.ts
 import { create } from 'zustand';
 import { useEffect } from 'react';
-import { parseLogLine } from '../utils/adb';
+import { parseIosLogLine } from '../utils/log';
 
-export interface LogEntry {
+export interface IosLogEntry {
   Time: string;
-  PID: string;
-  TID?: string;
-  Tag: string;
+  Process: string;
+  Category?: string;
   Message: string;
 }
 
-interface LogcatState {
-  logs: LogEntry[];
+interface IosLogState {
+  logs: IosLogEntry[];
   loading: boolean;
   running: boolean;
-  startLogcat: (options: { device: string; level?: string; buffer?: string }) => void;
-  stopLogcat: () => void;
+  startIosLog: (options: { device: string; appName?: string }) => void;
+  stopIosLog: () => void;
   clearLogs: () => void;
-  addLog: (log: LogEntry) => void;
+  addLog: (log: IosLogEntry) => void;
   setRunning: (running: boolean) => void;
   setLoading: (loading: boolean) => void;
 }
@@ -29,19 +28,19 @@ declare const vscode: {
 
 const MAX_LOGS = 200;
 
-export const useLogcatStore = create<LogcatState>((set) => ({
+export const useIosLogStore = create<IosLogState>((set) => ({
   logs: [],
   loading: false,
   running: false,
 
-  startLogcat: (options) => {
+  startIosLog: (options) => {
     set({ loading: true });
-    vscode.postMessage({ type: 'ADB_START_LOGCAT', options });
+    vscode.postMessage({ type: 'IOS_START_LOG', options });
   },
 
-  stopLogcat: () => {
-    console.log('stopLogcat called - sending ADB_STOP_LOGCAT message');
-    vscode.postMessage({ type: 'ADB_STOP_LOGCAT' });
+  stopIosLog: () => {
+    vscode.postMessage({ type: 'IOS_STOP_LOG' });
+    set({ running: false });
   },
 
   clearLogs: () => set({ logs: [] }),
@@ -49,7 +48,7 @@ export const useLogcatStore = create<LogcatState>((set) => ({
   addLog: (log) =>
     set((state) => {
       const newLogs = [...state.logs, log];
-      return { logs: newLogs.slice(-MAX_LOGS) }; // son 200
+      return { logs: newLogs.slice(-MAX_LOGS) }; // keep last 200
     }),
 
   setRunning: (running) => set({ running }),
@@ -57,45 +56,43 @@ export const useLogcatStore = create<LogcatState>((set) => ({
 }));
 
 // Custom hook
-export function useLogcat() {
+export function useIosLog() {
   const {
     logs,
     running,
     loading,
-    startLogcat,
-    stopLogcat,
+    startIosLog,
+    stopIosLog,
     clearLogs,
     addLog,
     setRunning,
     setLoading,
-  } = useLogcatStore();
+  } = useIosLogStore();
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const message = event.data;
       switch (message.type) {
-        case 'ADB_LOG': {
-          const parsed = parseLogLine(message.line);
+        case 'IOS_LOG': {
+          const parsed = parseIosLogLine(message.line);
           if (parsed) addLog(parsed);
           break;
         }
-        case 'ADB_LOG_ERROR': {
-          console.error('ADB Log Error:', message.error);
+        case 'IOS_LOG_ERROR': {
+          console.error('iOS Log Error:', message.error);
           break;
         }
-        case 'ADB_LOGCAT_STARTED': {
+        case 'IOS_LOG_STARTED': {
           setRunning(true);
           setLoading(false);
           break;
         }
-        case 'ADB_LOGCAT_STOPPED': {
-          console.log('Received ADB_LOGCAT_STOPPED - setting running to false');
+        case 'IOS_LOG_STOPPED': {
           setRunning(false);
           setLoading(false);
           break;
         }
-        case 'ADB_LOGCAT_EXIT': {
-          console.log('Received ADB_LOGCAT_EXIT - setting running to false');
+        case 'IOS_LOG_EXIT': {
           setRunning(false);
           setLoading(false);
           break;
@@ -107,5 +104,5 @@ export function useLogcat() {
     return () => window.removeEventListener('message', handler);
   }, [addLog, setRunning, setLoading]);
 
-  return { logs, running, loading, startLogcat, stopLogcat, clearLogs };
+  return { logs, running, loading, startIosLog, stopIosLog, clearLogs };
 }

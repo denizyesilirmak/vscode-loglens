@@ -14,6 +14,8 @@ import {
   adbKillServer,
   adbStartLogcat,
   adbStopLogcat,
+  simulatorStartLog,
+  simulatorStopLog,
 } from './utils/device';
 
 export type WebviewRequest =
@@ -31,7 +33,9 @@ export type WebviewRequest =
   | { type: 'NATIVE_LOG'; message: string }
   | { type: 'ADB_KILL_SERVER' }
   | { type: 'ADB_START_LOGCAT'; options: { device: string; level: string; buffer: string } }
-  | { type: 'ADB_STOP_LOGCAT' };
+  | { type: 'ADB_STOP_LOGCAT' }
+  | { type: 'IOS_START_LOG'; options: { device: string; appName?: string } }
+  | { type: 'IOS_STOP_LOG' };
 
 export interface AndroidEnv {
   installed: boolean;
@@ -211,8 +215,16 @@ class MobileLogsProvider implements vscode.WebviewViewProvider {
             break;
           }
           case 'ADB_STOP_LOGCAT': {
-            adbStopLogcat();
-            webview.postMessage({ type: 'ADB_LOGCAT_STOPPED' });
+            console.log('Extension received ADB_STOP_LOGCAT message');
+            adbStopLogcat(webview);
+            break;
+          }
+          case 'IOS_START_LOG': {
+            simulatorStartLog(webview, msg.options);
+            break;
+          }
+          case 'IOS_STOP_LOG': {
+            simulatorStopLog(webview);
             break;
           }
         }
