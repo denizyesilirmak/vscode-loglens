@@ -22,7 +22,7 @@ const IosScreen = () => {
         <div className="left-section">
           <span>Device:</span>
           <Select
-            options={devices.map((d) => ({ value: d.name, label: d.name }))}
+            options={devices.map((device) => ({ value: device.name, label: device.name }))}
             defaultValue={devices[0]?.name || ''}
             onChange={(value) => {
               console.log('Selected device:', value);
