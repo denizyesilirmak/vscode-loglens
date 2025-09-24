@@ -1,71 +1,166 @@
-# loglens README
+# LogLens 📱
 
-This is the README for your extension "loglens". After writing up a brief description, we recommend including the following sections.
+**View Android adb logcat and iOS Simulator logs side-by-side directly inside VS Code. Filter, color-highlight, and manage device logs without leaving your editor.**
 
-## Features
+[![Version](https://img.shields.io/vscode-marketplace/v/denizyesilirmak.loglens)](https://marketplace.visualstudio.com/items?itemName=denizyesilirmak.loglens)
+[![Installs](https://img.shields.io/vscode-marketplace/i/denizyesilirmak.loglens)](https://marketplace.visualstudio.com/items?itemName=denizyesilirmak.loglens)
+[![Rating](https://img.shields.io/vscode-marketplace/r/denizyesilirmak.loglens)](https://marketplace.visualstudio.com/items?itemName=denizyesilirmak.loglens)
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## ✨ Features
 
-For example if there is an image subfolder under your extension project workspace:
+### 🤖 Android Development
 
-\!\[feature X\]\(images/feature-x.png\)
+- **Real-time logcat monitoring** - Stream Android device logs directly in VS Code
+- **Multiple device support** - Connect and monitor multiple Android devices simultaneously
+- **Advanced filtering** - Filter by log level, process name, tag, or custom keywords
+- **Color-coded log levels** - Visual distinction between Error, Warning, Info, Debug, and Verbose logs
+- **AVD management** - Quick access to Android Virtual Devices
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### 🍎 iOS Development
 
-## Requirements
+- **iOS Simulator logs** - Monitor iOS Simulator logs in real-time
+- **Multi-simulator support** - Handle multiple booted simulators
+- **App-specific filtering** - Filter logs by specific iOS applications
+- **Seamless Xcode integration** - Works alongside your existing iOS development workflow
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+### 🎯 Developer Experience
 
-## Extension Settings
+- **Side-by-side panels** - Monitor both Android and iOS logs simultaneously
+- **No context switching** - Stay in VS Code while debugging mobile applications
+- **Lightweight and fast** - Minimal performance impact on your development environment
+- **Easy setup** - Automatic detection of ADB and Xcode installations
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## 🚀 Quick Start
 
-For example:
+1. **Install the extension** from the VS Code Marketplace
+2. **Open the Mobile Logs panel** - Look for the "Mobile Logs" panel in VS Code's panel area
+3. **Connect your devices**:
+   - For Android: Ensure ADB is installed and device is connected
+   - For iOS: Launch iOS Simulator from Xcode
+4. **Start monitoring** - Click the start button in the respective Android or iOS panel
 
-This extension contributes the following settings:
+## 📋 Requirements
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+### Android Development
 
-## Known Issues
+- **ADB (Android Debug Bridge)** installed and available in PATH
+- Android device connected via USB or network ADB
+- USB debugging enabled on your device
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+### iOS Development
 
-## Release Notes
+- **Xcode** installed (macOS only)
+- iOS Simulator running
+- Xcode command line tools installed
 
-Users appreciate release notes as you update your extension.
+## 🎮 Usage
 
-### 1.0.0
+### Android Logs Panel
 
-Initial release of ...
+1. **Device Selection**: Choose from connected Android devices or running AVDs
+2. **Log Level Filtering**: Filter by Verbose, Debug, Info, Warning, or Error
+3. **Buffer Selection**: Choose from main, system, radio, events, or crash buffers
+4. **Start/Stop Monitoring**: Control log streaming with intuitive buttons
+5. **Keyword Filtering**: Search for specific terms in log messages
 
-### 1.0.1
+### iOS Logs Panel
 
-Fixed issue #.
+1. **Simulator Selection**: Choose from booted iOS Simulators
+2. **App Filtering**: Monitor logs from specific iOS applications
+3. **Real-time Updates**: Live streaming of simulator logs
+4. **Start/Stop Controls**: Easy log monitoring management
 
-### 1.1.0
+## 🎨 Log Color Coding
 
-Added features X, Y, and Z.
+LogLens uses intuitive color coding to help you quickly identify different log levels:
+
+- 🔴 **Error** - Critical issues that need immediate attention
+- 🟡 **Warning** - Important notices that might indicate problems
+- 🔵 **Info** - General informational messages
+- 🟢 **Debug** - Detailed debugging information
+- ⚪ **Verbose** - Highly detailed diagnostic information
+
+## ⚙️ Configuration
+
+LogLens automatically detects your development environment setup. No additional configuration is required for basic usage.
+
+### Environment Detection
+
+The extension automatically checks for:
+
+- ADB installation and version
+- Connected Android devices
+- Available Android AVDs
+- Xcode installation and version
+- Running iOS Simulators
+
+## 🔧 Commands
+
+LogLens integrates seamlessly with VS Code's command palette:
+
+- Open Android Logs panel
+- Open iOS Logs panel  
+- Refresh device list
+- Kill ADB server (Android)
+
+## 🐛 Troubleshooting
+
+### Android Issues
+
+**Device not detected?**
+
+- Ensure USB debugging is enabled
+- Check ADB installation: `adb devices`
+- Try restarting ADB server: use the "Kill ADB Server" button
+
+**Logs not appearing?**
+
+- Verify device authorization
+- Check if the app is running and generating logs
+- Try different log level filters
+
+### iOS Issues
+
+**Simulator not detected?**
+
+- Ensure Xcode is properly installed
+- Launch iOS Simulator from Xcode
+- Check Xcode command line tools: `xcode-select --install`
+
+**No logs appearing?**
+
+- Make sure the simulator is fully booted
+- Launch an app in the simulator to generate logs
+- Try restarting the simulator
+
+## 🤝 Contributing
+
+We welcome contributions! If you'd like to contribute to LogLens:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 💖 Support
+
+If you find LogLens helpful, please consider:
+
+- ⭐ Starring the repository
+- 📝 Leaving a review on the VS Code Marketplace
+- 🐛 Reporting issues and suggesting features
+- 📢 Sharing with fellow mobile developers
 
 ---
 
-## Following extension guidelines
+## Happy Mobile Development! 🚀📱
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Made with ❤️ by [Deniz Yesilirmak](https://github.com/denizyesilirmak)

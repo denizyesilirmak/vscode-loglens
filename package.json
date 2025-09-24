@@ -7,7 +7,15 @@
   "engines": {
     "vscode": "^1.103.0"
   },
-  "activationEvents": ["*"],
+  "activationEvents": [
+    "onCommand:loglens.open",
+    "onCommand:loglens.openAndroidLogs",
+    "onCommand:loglens.openiOSLogs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/denizyesilirmak/vscode-mobile-log-extension"
+  },
   "categories": [
     "Other"
   ],
@@ -59,10 +67,13 @@
     "@typescript-eslint/parser": "^8.43.0",
     "@vscode/test-cli": "^0.0.9",
     "@vscode/test-electron": "^2.4.0",
+    "ajv": "^8.17.1",
+    "ajv-keywords": "^5.1.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "prettier": "^3.6.2",
+    "schema-utils": "^4.3.2",
     "ts-loader": "^9.5.1",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.43.0",
