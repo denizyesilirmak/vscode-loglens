@@ -5,6 +5,7 @@
     background-color: var(--background-secondary);
     color: var(--text-primary);
     overflow-y: auto;
+    contain: strict;
 }
 
 .logcat-container .level-error{

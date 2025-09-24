@@ -5,6 +5,14 @@ import { useIos } from '../../store/iosStore';
 import { useIosLog } from '../../store/iosLogStore';
 import SimulatorLogs from '../../components/SimulatorLogs';
 import { nativeLog } from '../../utils/log';
+import {
+  BoltIcon,
+  PlayIcon,
+  TrashIcon,
+  StopIcon,
+  ArrowPathIcon,
+  DevicePhoneMobileIcon,
+} from '@heroicons/react/24/solid';
 
 const IosScreen = () => {
   const [options, setOptions] = useState({
@@ -46,14 +54,11 @@ const IosScreen = () => {
     stopIosLog();
   };
 
-  console.log('iOS devices:', devices);
-  console.log('Current iOS logs:', logs);
-
   return (
     <div className="ios-screen">
       <div className="bar">
         <div className="left-section">
-          <span>Device:</span>
+          <DevicePhoneMobileIcon className="icon" />
           <Select
             options={devices.map((device) => ({ value: device.name, label: device.name }))}
             defaultValue={devices[0]?.name || ''}
@@ -63,8 +68,8 @@ const IosScreen = () => {
             }}
             placeholder="Select Device"
           />
-          <button className="refresh-button" onClick={refreshDevices}>
-            ⟳
+          <button className="icon-button" onClick={refreshDevices}>
+            <ArrowPathIcon className="icon" />
           </button>
         </div>
 
@@ -86,16 +91,16 @@ const IosScreen = () => {
             onChange={(e) => setKeyword(e.target.value)}
           />
           {!running ? (
-            <button className="refresh-button" onClick={handleApply} disabled={loading}>
-              {loading ? 'Starting...' : 'Apply'}
+            <button className="icon-button" onClick={handleApply} disabled={loading}>
+              {loading ? <BoltIcon className="icon" /> : <PlayIcon className="icon" />}
             </button>
           ) : (
-            <button className="refresh-button" onClick={handleStop}>
-              Stop
+            <button className="icon-button" onClick={handleStop}>
+              <StopIcon className="icon" />
             </button>
           )}
-          <button className="refresh-button" onClick={clearLogs} disabled={logs.length === 0}>
-            Clear
+          <button className="icon-button" onClick={clearLogs} disabled={logs.length === 0}>
+            <TrashIcon className="icon" />
           </button>
         </div>
       </div>

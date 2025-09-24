@@ -6,6 +6,14 @@ import './style.css';
 import { nativeLog } from '../../utils/log';
 import ToolBar from '../../components/ToolBar';
 import { useLogcat } from '../../store/logcatStore';
+import {
+  ArrowPathIcon,
+  BoltIcon,
+  DevicePhoneMobileIcon,
+  PlayIcon,
+  StopIcon,
+  TrashIcon,
+} from '@heroicons/react/24/solid';
 
 const AndroidScreen = () => {
   const { devices, refreshDevices } = useAdb();
@@ -43,7 +51,7 @@ const AndroidScreen = () => {
     <div className="android-screen">
       <div className="bar">
         <div className="left-section">
-          <span>Device:</span>
+          <DevicePhoneMobileIcon className="icon" />
           <Select
             options={devices.map((d) => ({ value: d.id, label: d.id }))}
             defaultValue={devices[0]?.id || ''}
@@ -53,13 +61,13 @@ const AndroidScreen = () => {
             }}
             placeholder="Select Device"
           />
-          <button className="refresh-button" onClick={refreshDevices}>
-            ⟳
+          <button className="icon-button" onClick={refreshDevices}>
+            <ArrowPathIcon className="icon" />
           </button>
         </div>
 
         <div className="right-section">
-          <span>Level:</span>
+          <span>Level</span>
           <Select
             options={[
               { value: 'verbose', label: 'Verbose' },
@@ -72,7 +80,6 @@ const AndroidScreen = () => {
             defaultValue="verbose"
             onChange={(value) => setOptions((prev) => ({ ...prev, level: value }))}
           />
-          <span>Buffer:</span>
           <Select
             options={[
               { value: 'main', label: 'Main' },
@@ -82,7 +89,6 @@ const AndroidScreen = () => {
             defaultValue="main"
             onChange={(value) => setOptions((prev) => ({ ...prev, buffer: value }))}
           />
-          <span>Keyword:</span>
           <input
             className="search-input"
             type="text"
@@ -91,16 +97,16 @@ const AndroidScreen = () => {
             onChange={(e) => setKeyword(e.target.value)}
           />
           {!running ? (
-            <button className="refresh-button" onClick={handleApply} disabled={loading}>
-              {loading ? 'Starting...' : 'Apply'}
+            <button className="icon-button" onClick={handleApply} disabled={loading}>
+              {loading ? <BoltIcon className="icon" /> : <PlayIcon className="icon" />}
             </button>
           ) : (
-            <button className="refresh-button" onClick={handleStop}>
-              Stop
+            <button className="icon-button" onClick={handleStop}>
+              <StopIcon className="icon" />
             </button>
           )}
-          <button className="refresh-button" onClick={clearLogs} disabled={logs.length === 0}>
-            Clear
+          <button className="icon-button" onClick={clearLogs} disabled={logs.length === 0}>
+            <TrashIcon className="icon" />
           </button>
         </div>
       </div>

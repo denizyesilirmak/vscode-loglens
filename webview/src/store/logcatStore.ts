@@ -6,6 +6,7 @@ import { parseLogLine } from '../utils/adb';
 export interface LogEntry {
   Time: string;
   PID: string;
+  ProcessName?: string; // Process name resolved from PID
   TID?: string;
   Tag: string;
   Message: string;
@@ -27,6 +28,12 @@ declare const vscode: {
   postMessage: (msg: unknown) => void;
 };
 
+interface LogMessage {
+  type: 'ADB_LOG';
+  line: string;
+  processName?: string;
+}
+
 const MAX_LOGS = 200;
 
 export const useLogcatStore = create<LogcatState>((set) => ({
@@ -41,7 +48,14 @@ export const useLogcatStore = create<LogcatState>((set) => ({
 
   stopLogcat: () => {
     console.log('stopLogcat called - sending ADB_STOP_LOGCAT message');
+    // İlk önce frontend'te durdur
+    set({ running: false, loading: false });
+    // Sonra backend'e mesaj gönder
     vscode.postMessage({ type: 'ADB_STOP_LOGCAT' });
+    // Log'ları da temizle
+    setTimeout(() => {
+      set({ logs: [] });
+    }, 100);
   },
 
   clearLogs: () => set({ logs: [] }),
@@ -73,10 +87,27 @@ export function useLogcat() {
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const message = event.data;
+      console.log('Received message:', message.type); // DEBUG: tüm mesajları logla
       switch (message.type) {
         case 'ADB_LOG': {
+          // Eğer running false ise yeni log ekleme!
+          if (!useLogcatStore.getState().running) {
+            console.log('Ignoring ADB_LOG because running is false');
+            break;
+          }
+
           const parsed = parseLogLine(message.line);
-          if (parsed) addLog(parsed);
+          if (parsed) {
+            // Debug log to see if process names are being received
+            if (message.processName) {
+              console.log(`Process name for PID ${parsed.PID}: ${message.processName}`);
+            }
+            const logEntry: LogEntry = {
+              ...parsed,
+              ProcessName: message.processName,
+            };
+            addLog(logEntry);
+          }
           break;
         }
         case 'ADB_LOG_ERROR': {
@@ -89,9 +120,11 @@ export function useLogcat() {
           break;
         }
         case 'ADB_LOGCAT_STOPPED': {
-          console.log('Received ADB_LOGCAT_STOPPED - setting running to false');
+          console.log('Received ADB_LOGCAT_STOPPED - setting running to false and clearing logs');
           setRunning(false);
           setLoading(false);
+          // KRITIK: Stop edildiğinde log'ları temizle!
+          clearLogs();
           break;
         }
         case 'ADB_LOGCAT_EXIT': {
@@ -105,7 +138,7 @@ export function useLogcat() {
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [addLog, setRunning, setLoading]);
+  }, [addLog, setRunning, setLoading, clearLogs]);
 
   return { logs, running, loading, startLogcat, stopLogcat, clearLogs };
 }

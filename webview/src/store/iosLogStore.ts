@@ -39,8 +39,11 @@ export const useIosLogStore = create<IosLogState>((set) => ({
   },
 
   stopIosLog: () => {
+    console.log('stopIosLog called - sending IOS_STOP_LOG message');
+    // İlk önce frontend'te durdur
+    set({ running: false, loading: false });
+    // Sonra backend'e mesaj gönder
     vscode.postMessage({ type: 'IOS_STOP_LOG' });
-    set({ running: false });
   },
 
   clearLogs: () => set({ logs: [] }),
@@ -74,6 +77,11 @@ export function useIosLog() {
       const message = event.data;
       switch (message.type) {
         case 'IOS_LOG': {
+          if (!useIosLogStore.getState().running) {
+            console.log('Ignoring IOS_LOG because running is false');
+            break;
+          }
+
           const parsed = parseIosLogLine(message.line);
           if (parsed) addLog(parsed);
           break;
@@ -88,11 +96,14 @@ export function useIosLog() {
           break;
         }
         case 'IOS_LOG_STOPPED': {
+          console.log('Received IOS_LOG_STOPPED - setting running to false and clearing logs');
           setRunning(false);
           setLoading(false);
+          // clearLogs();
           break;
         }
         case 'IOS_LOG_EXIT': {
+          console.log('Received IOS_LOG_EXIT - setting running to false');
           setRunning(false);
           setLoading(false);
           break;
@@ -102,7 +113,7 @@ export function useIosLog() {
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [addLog, setRunning, setLoading]);
+  }, [addLog, setRunning, setLoading, clearLogs]);
 
   return { logs, running, loading, startIosLog, stopIosLog, clearLogs };
 }

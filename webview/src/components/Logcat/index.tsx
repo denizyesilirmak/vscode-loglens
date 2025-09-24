@@ -3,7 +3,7 @@ import './style.css';
 
 const columns = [
   { name: 'Time', width: '6%' },
-  { name: 'PID', width: '6%' },
+  { name: 'Process', width: '8%' },
   { name: 'Tag', width: '6%' },
   { name: 'Message', width: 'fit-content' },
 ];
@@ -39,7 +39,9 @@ const LogCat = ({ logs, keyword }: { logs?: any[]; keyword?: string }) => {
           {logs?.map((log, index) => (
             <tr className={`level-${log.level}`} key={index}>
               <td style={{ padding: '8px' }}>{format(new Date(log.Time), 'HH:mm:ss')}</td>
-              <td style={{ padding: '8px' }}>{shortenText(log.PID, 10)}</td>
+              <td style={{ padding: '8px' }} title={`PID: ${log.PID}`}>
+                {shortenText(log.ProcessName || log.PID, 15)}
+              </td>
               <td style={{ padding: '8px' }}>{shortenText(log.Tag, 15)}</td>
               <td style={{ padding: '8px' }}>{shortenText(log.Message, 300)}</td>
             </tr>

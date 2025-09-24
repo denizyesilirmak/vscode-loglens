@@ -9,6 +9,201 @@ let currentSimulatorLog: ChildProcessWithoutNullStreams | null = null;
 let lineBuf = '';
 let iosLineBuf = '';
 
+// Process name mapping cache
+const processNameCache: Map<string, string> = new Map(); // PID -> ProcessName
+let processNameCacheTime = 0;
+const PROCESS_CACHE_TTL = 5000; // 5 seconds
+  adbStopLogcat(webview);
+
+  const binPath = getAdbPath() ?? 'adb';
+  const prio = toPriorityLetter(options.level);
+  const buffers = normalizeBuffers(options.buffer);
+
+  const args: string[] = ['-s', options.device, 'logcat'];
+  for (const b of buffers) args.push('-b', b);
+  args.push('-v', 'time', `*:${prio}`);
+
+  console.log('Starting ADB logcat with args:', [binPath, ...args].join(' '));
+
+  // Initialize process cache
+  updateProcessNameCache(options.device).catch((err) => {
+    console.error('Failed to initialize process cache:', err);
+  });
+
+  // Set up periodic cache refresh
+  const cacheRefreshInterval = setInterval(() => {
+    updateProcessNameCache(options.device).catch((err) => {
+      console.error('Failed to refresh process cache:', err);
+    });
+  }, PROCESS_CACHE_TTL);
+
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    child = spawn(binPath, args, {
+      detached: false,
+    });
+  } catch (err) {
+    clearInterval(cacheRefreshInterval);
+    console.error('Failed to spawn adb logcat:', err);
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
+    return;
+  }
+
+  currentLogcat = child;
+
+  // UI'a started
+  try {
+    webview.postMessage({
+      type: 'ADB_LOGCAT_STARTED',
+      device: options.device,
+      buffers,
+      level: prio,
+    });
+  } catch {
+    console.error('Failed to send ADB_LOGCAT_STARTED message');
+  }
+
+  // stdout -> line by line with process name resolution
+  child.stdout.on('data', (chunk: Buffer) => {
+    lineBuf += chunk.toString('utf8');
+    const lines = lineBuf.split(/\r?\n/);
+    lineBuf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        // Extract PID from log line to get process name
+        const pidMatch = line.match(/\(\s*(\d+)(?:\s+\d+)?\)\s*:/);
+        const pid = pidMatch ? pidMatch[1] : null;
+        const processName = pid ? getProcessName(pid) : undefined;
+        
+        webview.postMessage({ 
+          type: 'ADB_LOG', 
+          line, 
+          processName 
+        });
+      } catch {
+        console.error('Failed to send ADB_LOG message:', line);
+      }
+    }
+  });
+
+  // stderr -> error
+  child.stderr.on('data', (chunk: Buffer) => {
+    const msg = chunk.toString('utf8');
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: msg });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', msg);
+    }
+  });
+
+  child.on('error', (err) => {
+    clearInterval(cacheRefreshInterval);
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
+  });
+
+  child.on('close', (code, signal) => {
+    clearInterval(cacheRefreshInterval);
+    try {
+      webview.postMessage({ type: 'ADB_LOGCAT_EXIT', code, signal });
+    } catch {
+      console.error('Failed to send ADB_LOGCAT_EXIT message:', code, signal);
+    }
+    if (currentLogcat === child) {
+      currentLogcat = null;
+      lineBuf = '';
+    }
+  });
+}me
+let processNameCacheTime = 0;
+const PROCESS_CACHE_TTL = 5000; // 5 seconds
+
+/**
+ * Updates the process name cache by executing adb shell ps command
+ */
+async function updateProcessNameCache(deviceId: string): Promise<void> {
+  const now = Date.now();
+  if (now - processNameCacheTime < PROCESS_CACHE_TTL) {
+    return; // Cache is still fresh
+  }
+
+  const binPath = getAdbPath() ?? 'adb';
+  
+  return new Promise<void>((resolve) => {
+    exec(`"${binPath}" -s ${deviceId} shell ps`, (error, stdout) => {
+      if (error) {
+        console.error('Failed to get process list:', error);
+        resolve();
+        return;
+      }
+
+      try {
+        const lines = stdout.split('\n');
+        processNameCache.clear();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          // Parse ps output format: USER PID PPID VSZ RSS WCHAN ADDR S NAME
+          // or sometimes: PID USER VSZ STAT COMMAND
+          const parts = line.trim().split(/\s+/);
+          
+          if (parts.length >= 2) {
+            let pid: string;
+            let processName: string;
+            
+            // Try different ps output formats
+            if (parts[0] === 'USER' || parts[0] === 'PID') {
+              // Header line, skip
+              continue;
+            }
+            
+            // Check if first column is PID (numeric)
+            if (/^\d+$/.test(parts[0])) {
+              pid = parts[0];
+              processName = parts[parts.length - 1]; // Last column is usually the command/name
+            } else if (parts.length >= 2 && /^\d+$/.test(parts[1])) {
+              // Second column is PID
+              pid = parts[1];
+              processName = parts[parts.length - 1];
+            } else {
+              continue;
+            }
+            
+            // Clean up process name (remove path and parameters)
+            processName = processName.split('/').pop()?.split(' ')[0] || processName;
+            processNameCache.set(pid, processName);
+          }
+        }
+        
+        processNameCacheTime = now;
+        console.log(
+          `Updated process cache with ${processNameCache.size} processes for device ${deviceId}`,
+        );
+      } catch (err) {
+        console.error('Failed to parse ps output:', err);
+      }
+      
+      resolve();
+    });
+  });
+}
+
+/**
+ * Gets process name for a given PID from cache
+ */
+function getProcessName(pid: string): string | undefined {
+  return processNameCache.get(pid);
+}
+
 export interface AdbDevice {
   id: string;
   status: 'device' | 'offline' | 'unauthorized' | string;
@@ -362,145 +557,44 @@ export function adbStopLogcat(webview?: any): void {
   }
 
   console.log('Process exists, attempting to kill PID:', p.pid);
-  const pid = p.pid;
-
-  // ÖNEMLİ: Önce stream'leri temizle ki buffer'dan gelen veri UI'ye ulaşmasın!
-  try {
-    console.log('Cleaning up process streams and listeners');
-    p.stdout?.removeAllListeners();
-    p.stderr?.removeAllListeners();
-    p.removeAllListeners();
-
-    // Stream'leri pause ve destroy et
-    p.stdout?.pause();
-    p.stderr?.pause();
-    p.stdout?.destroy();
-    p.stderr?.destroy();
-
-    console.log('Process streams cleaned up successfully');
-  } catch (err) {
-    console.warn('Error cleaning up streams:', err);
-  }
 
   currentLogcat = null;
   lineBuf = '';
 
-  let messageSent = false;
-  const sendStoppedMessage = () => {
-    if (!messageSent) {
-      messageSent = true;
-      console.log('Sending ADB_LOGCAT_STOPPED message');
-      try {
-        webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
-      } catch {}
-    }
+  // Set up a listener for when the process actually closes
+  const handleClose = () => {
+    console.log('Process closed naturally, sending ADB_LOGCAT_STOPPED');
+    try {
+      webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
+    } catch {}
   };
 
-  // Set up a listener for when the process actually closes
-  p.once('close', () => {
-    console.log('Process closed naturally');
-    sendStoppedMessage();
-  });
+  // If process closes naturally, send stopped message
+  p.once('close', handleClose);
 
-  // AGRESIF DURDURMA STRATEJİSİ
-
-  // 1. İlk SIGKILL denemesi
   try {
-    console.log('Attempting immediate SIGKILL');
-    p.kill('SIGKILL');
+    console.log('Attempting to kill process with SIGTERM');
+    p.kill();
   } catch (err) {
-    console.error('Failed to SIGKILL process:', err);
+    console.error('Failed to kill process:', err);
   }
 
-  // 2. Process group kill (100ms sonra)
+  // Fallback: force kill after timeout and send message
   setTimeout(() => {
-    try {
-      if (pid && process.platform !== 'win32') {
-        console.log('Attempting process group kill');
-        process.kill(-pid, 'SIGKILL');
+    if (p && !p.killed) {
+      console.log('Process still running after 600ms, force killing');
+      killProcessHard(p);
+      // Remove the close listener since we're force killing
+      p.removeListener('close', handleClose);
+      try {
+        webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
+      } catch {
+        console.error('Failed to send ADB_LOGCAT_STOPPED message after force kill');
       }
-    } catch (err) {
-      console.warn('Process group kill failed:', err);
+    } else {
+      console.log('Process was killed successfully within 600ms');
     }
-  }, 100);
-
-  // 3. Sistem geneli temizlik (200ms sonra)
-  setTimeout(() => {
-    try {
-      console.log('Attempting system-wide logcat cleanup');
-      if (process.platform === 'win32') {
-        execSync(`taskkill /F /IM adb.exe`, { stdio: 'ignore' });
-      } else {
-        // Önce pgrep ile kontrol et, sonra öldür
-        try {
-          const result = execSync(`pgrep -f "adb.*logcat"`, { encoding: 'utf8', stdio: 'pipe' });
-          if (result.trim()) {
-            const pids = result.trim().split('\n');
-            console.log(`Found ${pids.length} adb logcat processes:`, pids);
-
-            // Her PID'i tek tek öldür
-            for (const pid of pids) {
-              try {
-                execSync(`kill -9 ${pid.trim()}`, { stdio: 'ignore' });
-                console.log(`Killed PID: ${pid.trim()}`);
-              } catch (killErr) {
-                console.warn(`Failed to kill PID ${pid}:`, killErr);
-              }
-            }
-          } else {
-            console.log('No adb logcat processes found with pgrep');
-          }
-        } catch (pgrepErr) {
-          // pgrep başarısız olursa pkill dene
-          console.log('pgrep failed, trying pkill...');
-          try {
-            execSync(`pkill -9 -f "adb.*logcat"`, { stdio: 'ignore' });
-            console.log('pkill completed successfully');
-          } catch (pkillErr) {
-            console.warn('Both pgrep and pkill failed - no logcat processes to clean up');
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('System-wide cleanup failed:', err);
-    }
-  }, 200);
-
-  // 4. Son çare manuel PID kill (400ms sonra)
-  setTimeout(() => {
-    try {
-      if (pid) {
-        console.log('Attempting manual PID kill for:', pid);
-        if (process.platform === 'win32') {
-          try {
-            execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
-            console.log(`Successfully killed Windows PID: ${pid}`);
-          } catch (winErr) {
-            console.warn(`Windows taskkill failed for PID ${pid}:`, winErr);
-          }
-        } else {
-          // Önce süreç var mı kontrol et
-          try {
-            execSync(`kill -0 ${pid}`, { stdio: 'ignore' }); // -0 sadece kontrol eder
-            // Süreç varsa öldür
-            execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
-            console.log(`Successfully killed Unix PID: ${pid}`);
-          } catch (unixErr) {
-            // Süreç zaten yok veya öldürülemedi
-            console.log(`Unix PID ${pid} already dead or kill failed (this is often OK)`);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Manual PID kill failed:', err);
-    }
-  }, 400);
-
-  // 5. Her durumda mesaj gönder (800ms sonra)
-  setTimeout(() => {
-    console.log('Timeout reached, ensuring message is sent');
-    sendStoppedMessage();
-  }, 800);
+  }, 600);
 }
 
 /**
@@ -515,109 +609,92 @@ export function adbStartLogcat(
   webview: any,
   options: { device: string; level: string; buffer: string },
 ): void {
-  // Ensure any existing process is fully stopped before starting new one
-  if (currentLogcat && !currentLogcat.killed) {
-    console.log('Stopping existing logcat process before starting new one');
-    adbStopLogcat(webview);
-    // Wait a bit for cleanup
-    setTimeout(() => startNewLogcat(), 500);
+  adbStopLogcat(webview);
+
+  const binPath = getAdbPath() ?? 'adb';
+  const prio = toPriorityLetter(options.level);
+  const buffers = normalizeBuffers(options.buffer);
+
+  const args: string[] = ['-s', options.device, 'logcat'];
+  for (const b of buffers) args.push('-b', b);
+  args.push('-v', 'time', `*:${prio}`);
+
+  console.log('Starting ADB logcat with args:', [binPath, ...args].join(' '));
+
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    // ⚠️ burada "const child = ..." demiyoruz; var olan değişkene atıyoruz
+    child = spawn(binPath, args, {
+      detached: false, // Don't detach from parent process
+    }); // stdio belirtmeyince tipi ChildProcessWithoutNullStreams olur
+  } catch (err) {
+    console.error('Failed to spawn adb logcat:', err);
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
     return;
   }
 
-  startNewLogcat();
+  currentLogcat = child;
 
-  function startNewLogcat() {
-    const binPath = getAdbPath() ?? 'adb';
-    const prio = toPriorityLetter(options.level);
-    const buffers = normalizeBuffers(options.buffer);
+  // UI’a started
+  try {
+    webview.postMessage({
+      type: 'ADB_LOGCAT_STARTED',
+      device: options.device,
+      buffers,
+      level: prio,
+    });
+  } catch {
+    console.error('Failed to send ADB_LOGCAT_STARTED message');
+  }
 
-    const args: string[] = ['-s', options.device, 'logcat'];
-    for (const b of buffers) args.push('-b', b);
-    args.push('-v', 'time', `*:${prio}`);
-
-    console.log('Starting ADB logcat with args:', [binPath, ...args].join(' '));
-
-    let child: ChildProcessWithoutNullStreams;
-    try {
-      // ⚠️ burada "const child = ..." demiyoruz; var olan değişkene atıyoruz
-      child = spawn(binPath, args, {
-        detached: false, // Don't detach from parent process
-      }); // stdio belirtmeyince tipi ChildProcessWithoutNullStreams olur
-    } catch (err) {
-      console.error('Failed to spawn adb logcat:', err);
+  // stdout -> line by line
+  child.stdout.on('data', (chunk: Buffer) => {
+    lineBuf += chunk.toString('utf8');
+    const lines = lineBuf.split(/\r?\n/);
+    lineBuf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) continue;
       try {
-        webview.postMessage({
-          type: 'ADB_LOG_ERROR',
-          error: String((err as Error)?.message ?? err),
-        });
+        webview.postMessage({ type: 'ADB_LOG', line });
       } catch {
-        console.error('Failed to send ADB_LOG_ERROR message:', err);
+        console.error('Failed to send ADB_LOG message:', line);
       }
-      return;
     }
+  });
 
-    currentLogcat = child;
-
-    // UI’a started
+  // stderr -> error
+  child.stderr.on('data', (chunk: Buffer) => {
+    const msg = chunk.toString('utf8');
     try {
-      webview.postMessage({
-        type: 'ADB_LOGCAT_STARTED',
-        device: options.device,
-        buffers,
-        level: prio,
-      });
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: msg });
     } catch {
-      console.error('Failed to send ADB_LOGCAT_STARTED message');
+      console.error('Failed to send ADB_LOG_ERROR message:', msg);
     }
+  });
 
-    // stdout -> line by line
-    child.stdout.on('data', (chunk: Buffer) => {
-      lineBuf += chunk.toString('utf8');
-      const lines = lineBuf.split(/\r?\n/);
-      lineBuf = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line) continue;
-        try {
-          webview.postMessage({ type: 'ADB_LOG', line });
-        } catch {
-          console.error('Failed to send ADB_LOG message:', line);
-        }
-      }
-    });
+  child.on('error', (err) => {
+    try {
+      webview.postMessage({ type: 'ADB_LOG_ERROR', error: String((err as Error)?.message ?? err) });
+    } catch {
+      console.error('Failed to send ADB_LOG_ERROR message:', err);
+    }
+  });
 
-    // stderr -> error
-    child.stderr.on('data', (chunk: Buffer) => {
-      const msg = chunk.toString('utf8');
-      try {
-        webview.postMessage({ type: 'ADB_LOG_ERROR', error: msg });
-      } catch {
-        console.error('Failed to send ADB_LOG_ERROR message:', msg);
-      }
-    });
-
-    child.on('error', (err) => {
-      try {
-        webview.postMessage({
-          type: 'ADB_LOG_ERROR',
-          error: String((err as Error)?.message ?? err),
-        });
-      } catch {
-        console.error('Failed to send ADB_LOG_ERROR message:', err);
-      }
-    });
-
-    child.on('close', (code, signal) => {
-      try {
-        webview.postMessage({ type: 'ADB_LOGCAT_EXIT', code, signal });
-      } catch {
-        console.error('Failed to send ADB_LOGCAT_EXIT message:', code, signal);
-      }
-      if (currentLogcat === child) {
-        currentLogcat = null;
-        lineBuf = '';
-      }
-    });
-  } // startNewLogcat fonksiyonunun kapanışı
+  child.on('close', (code, signal) => {
+    try {
+      webview.postMessage({ type: 'ADB_LOGCAT_EXIT', code, signal });
+    } catch {
+      console.error('Failed to send ADB_LOGCAT_EXIT message:', code, signal);
+    }
+    if (currentLogcat === child) {
+      currentLogcat = null;
+      lineBuf = '';
+    }
+  });
 }
 
 function toPriorityLetter(level: string): 'V' | 'D' | 'I' | 'W' | 'E' | 'F' | 'S' {
@@ -737,13 +814,7 @@ export function simulatorStartLog(
 
   // Add predicate filter if app name is provided
   if (appName && appName.trim()) {
-    // If app name provided, create a contains predicate for more flexible matching
-    // This allows partial matches like "lotteries" in "com.example.lotteries"
-    const sanitizedAppName = appName.trim().replace(/"/g, '\\"'); // Escape any quotes
-    args.push('--predicate', `process CONTAINS "${sanitizedAppName}"`);
-
-    // Add syslog style for better formatting
-    args.push('--style', 'syslog');
+    args.push('--predicate', `process == "${appName.trim()}"`);
   }
 
   console.log('Starting iOS simulator log with args:', ['xcrun', ...args].join(' '));

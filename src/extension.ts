@@ -34,6 +34,7 @@ export type WebviewRequest =
   | { type: 'ADB_KILL_SERVER' }
   | { type: 'ADB_START_LOGCAT'; options: { device: string; level: string; buffer: string } }
   | { type: 'ADB_STOP_LOGCAT' }
+  | { type: 'ADB_LOG'; line: string; processName?: string }
   | { type: 'IOS_START_LOG'; options: { device: string; appName?: string } }
   | { type: 'IOS_STOP_LOG' };
 
