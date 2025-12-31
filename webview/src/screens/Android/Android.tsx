@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import LogCat from '../../components/Logcat';
 import Select from '../../components/Select';
 import { useAdb } from '../../store/adbStore';
@@ -16,7 +16,7 @@ import {
 } from '@heroicons/react/24/solid';
 
 const AndroidScreen = () => {
-  const { devices, refreshDevices } = useAdb();
+  const { devices, refreshDevices, processes, refreshProcesses, clearProcesses } = useAdb(); // UPDATED: Destructure process-related from store
   const { startLogcat, stopLogcat, logs, clearLogs, running, loading } = useLogcat();
 
   const [options, setOptions] = useState({
@@ -24,11 +24,32 @@ const AndroidScreen = () => {
     level: 'verbose',
     buffer: 'main',
   });
+  const [selectedProcessId, setSelectedProcessId] = useState<string>(''); // NEW: Selected Process PID
   const [keyword, setKeyword] = useState('');
+
+  // Client-side filtering levels
+  const [filterLevels, setFilterLevels] = useState<Record<string, boolean>>({
+    V: true,
+    D: true,
+    I: true,
+    W: true,
+    E: true,
+    F: true, // Fatal/Assert
+  });
 
   useEffect(() => {
     refreshDevices();
   }, [refreshDevices]);
+
+  // NEW: Fetch processes when device changes or is selected
+  useEffect(() => {
+    if (options.device) {
+      refreshProcesses(options.device);
+    } else {
+      clearProcesses();
+    }
+  }, [options.device, refreshProcesses, clearProcesses]);
+
 
   const handleApply = () => {
     if (!options.device) {
@@ -36,7 +57,6 @@ const AndroidScreen = () => {
       return;
     }
     nativeLog(`Applied filters: ${JSON.stringify(options)}`);
-
     startLogcat(options);
   };
 
@@ -45,7 +65,32 @@ const AndroidScreen = () => {
     stopLogcat();
   };
 
-  console.log('Current logs:', logs);
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      // Level filter
+      if (log.Level && !filterLevels[log.Level]) {
+        return false;
+      }
+      // Keyword filter
+      if (keyword && keyword.trim()) {
+        const k = keyword.toLowerCase();
+        const msgMatch = log.Message.toLowerCase().includes(k);
+        const tagMatch = log.Tag.toLowerCase().includes(k);
+        if (!msgMatch && !tagMatch) return false;
+      }
+
+      // NEW: Process PID filter
+      if (selectedProcessId && log.PID !== selectedProcessId) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [logs, keyword, filterLevels, selectedProcessId]);
+
+  const toggleLevel = (lvl: string) => {
+    setFilterLevels((prev) => ({ ...prev, [lvl]: !prev[lvl] }));
+  };
 
   return (
     <div className="android-screen">
@@ -56,7 +101,6 @@ const AndroidScreen = () => {
             options={devices.map((d) => ({ value: d.id, label: d.id }))}
             defaultValue={devices[0]?.id || ''}
             onChange={(value) => {
-              console.log('Selected device:', value);
               setOptions((prev) => ({ ...prev, device: value }));
             }}
             placeholder="Select Device"
@@ -64,22 +108,26 @@ const AndroidScreen = () => {
           <button className="icon-button" onClick={refreshDevices}>
             <ArrowPathIcon className="icon" />
           </button>
+
+          {/* NEW: Process Dropdown */}
+          <div className="process-section">
+            <Select
+              options={[
+                { value: '', label: 'All Processes' },
+                ...processes.map(p => ({ value: p.pid, label: `${p.name} (${p.pid})` }))
+              ]}
+              defaultValue=""
+              value={selectedProcessId}
+              onChange={(val) => setSelectedProcessId(val)}
+              placeholder="All Processes"
+            />
+            <button className="icon-button" onClick={() => options.device && refreshProcesses(options.device)} disabled={!options.device} title="Refresh Processes">
+              <ArrowPathIcon className="icon" />
+            </button>
+          </div>
         </div>
 
         <div className="right-section">
-          <span>Level</span>
-          <Select
-            options={[
-              { value: 'verbose', label: 'Verbose' },
-              { value: 'debug', label: 'Debug' },
-              { value: 'info', label: 'Info' },
-              { value: 'warn', label: 'Warn' },
-              { value: 'error', label: 'Error' },
-              { value: 'assert', label: 'Assert' },
-            ]}
-            defaultValue="verbose"
-            onChange={(value) => setOptions((prev) => ({ ...prev, level: value }))}
-          />
           <Select
             options={[
               { value: 'main', label: 'Main' },
@@ -89,6 +137,32 @@ const AndroidScreen = () => {
             defaultValue="main"
             onChange={(value) => setOptions((prev) => ({ ...prev, buffer: value }))}
           />
+
+          <div
+            className="checkbox-group"
+            style={{ display: 'flex', gap: '4px', alignItems: 'center', marginLeft: '8px' }}
+          >
+            {['V', 'D', 'I', 'W', 'E'].map((lvl) => (
+              <label
+                key={lvl}
+                style={{
+                  fontSize: '0.8em',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title={`Toggle ${lvl}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!filterLevels[lvl]}
+                  onChange={() => toggleLevel(lvl)}
+                />
+                {lvl}
+              </label>
+            ))}
+          </div>
+
           <input
             className="search-input"
             type="text"
@@ -110,7 +184,7 @@ const AndroidScreen = () => {
           </button>
         </div>
       </div>
-      <LogCat logs={logs} keyword={keyword} />
+      <LogCat logs={filteredLogs} keyword={keyword} />
       <ToolBar />
     </div>
   );

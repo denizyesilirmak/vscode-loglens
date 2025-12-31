@@ -1,0 +1,74 @@
+.logcat-container {
+    height: 100%;
+    width: 100%;
+    overflow-y: auto;
+    contain: strict;
+    font-family: var(--vscode-editor-font-family);
+    font-size: var(--vscode-editor-font-size);
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}
+
+.log-row {
+    display: flex;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    padding: 2px 0;
+    line-height: 1.5;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 13px;
+}
+
+.log-row:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.col-time {
+    width: 80px;
+    flex-shrink: 0;
+    color: var(--vscode-descriptionForeground);
+    padding: 0 4px;
+    border-right: 1px solid var(--vscode-panel-border);
+    white-space: nowrap;
+}
+
+.col-process {
+    width: 120px;
+    flex-shrink: 0;
+    font-weight: bold;
+    color: var(--vscode-symbolIcon-classForeground);
+    padding: 0 4px;
+    border-right: 1px solid var(--vscode-panel-border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.col-msg {
+    flex-grow: 1;
+    padding: 0 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.scroll-bottom-btn {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+}
+
+.scroll-bottom-btn:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}

@@ -6,8 +6,58 @@ const PLAT = process.platform as Platform;
 
 let currentLogcat: ChildProcessWithoutNullStreams | null = null;
 let currentSimulatorLog: ChildProcessWithoutNullStreams | null = null;
-let lineBuf = '';
-let iosLineBuf = '';
+
+// ==========================================
+// Log Buffering Logic
+// ==========================================
+class LogBuffer {
+  private buffer: string[] = [];
+  private timer: NodeJS.Timeout | null = null;
+  private readonly FLUSH_INTERVAL_MS = 100;
+  private readonly MAX_BUFFER_SIZE = 500;
+
+  constructor(
+    private readonly onFlush: (lines: string[]) => void,
+  ) { }
+
+  public add(line: string) {
+    if (!line) return;
+    this.buffer.push(line);
+
+    if (this.buffer.length >= this.MAX_BUFFER_SIZE) {
+      this.flush();
+    } else if (!this.timer) {
+      this.timer = setTimeout(() => this.flush(), this.FLUSH_INTERVAL_MS);
+    }
+  }
+
+  public flush() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.buffer.length > 0) {
+      const lines = [...this.buffer];
+      this.buffer = [];
+      try {
+        this.onFlush(lines);
+      } catch (e) {
+        console.error('Error flushing log buffer:', e);
+      }
+    }
+  }
+
+  public clear() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.buffer = [];
+  }
+}
+
+let adbLogBuffer: LogBuffer | null = null;
+let iosLogBuffer: LogBuffer | null = null;
 
 export interface AdbDevice {
   id: string;
@@ -164,6 +214,49 @@ export function getAdbDevices(): AdbDevice[] {
     });
 
   return devices;
+}
+
+/**
+ * Retrieves a list of running processes on the specified Android device.
+ * @param deviceId The ID of the target Android device.
+ * @returns An array of objects containing PID and ProcessName.
+ */
+export function adbGetProcesses(deviceId: string): { pid: string; name: string }[] {
+  const bin = getAdbPath() ?? 'adb';
+  // Use 'ps -A -o PID,NAME' for Android 8+ (Oreo). Fallback might be needed for very old devices, 
+  // but most modern dev devices support this. 
+  // -A: Select all processes. 
+  // -o: Output format.
+  const cmd = `"${bin}" -s ${deviceId} shell ps -A -o PID,NAME`;
+
+  const out = safeExec(cmd);
+  if (!out) return [];
+
+  const lines = out.split('\n');
+  // First line is header: "PID NAME" (or similar)
+  // Skip first line
+  const processes: { pid: string; name: string }[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Split by whitespace. The Name might contain spaces? 
+    // Usually package names don't contain spaces. But some kernel threads might like [kworker...].
+    // split via regex for safety.
+    const parts = line.split(/\s+/);
+    if (parts.length >= 2) {
+      const pid = parts[0];
+      // Name is the last part usually, or the second part? 
+      // With -o PID,NAME it should be strictly two columns ideally, but if name has spaces...
+      // Android package names don't have spaces.
+      const name = parts.slice(1).join(' ');
+      processes.push({ pid, name });
+    }
+  }
+
+  // Sort by name for easier searching
+  return processes.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -351,13 +444,20 @@ export async function adbKillServer(): Promise<boolean> {
  */
 export function adbStopLogcat(webview?: any): void {
   console.log('adbStopLogcat called');
+
+  // Clear buffer
+  if (adbLogBuffer) {
+    adbLogBuffer.clear();
+    adbLogBuffer = null;
+  }
+
   const p = currentLogcat;
   if (!p || p.killed) {
     // Already stopped or no process running
     console.log('No process running or already killed');
     try {
       webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
-    } catch {}
+    } catch { }
     return;
   }
 
@@ -383,7 +483,6 @@ export function adbStopLogcat(webview?: any): void {
   }
 
   currentLogcat = null;
-  lineBuf = '';
 
   let messageSent = false;
   const sendStoppedMessage = () => {
@@ -392,7 +491,7 @@ export function adbStopLogcat(webview?: any): void {
       console.log('Sending ADB_LOGCAT_STOPPED message');
       try {
         webview?.postMessage?.({ type: 'ADB_LOGCAT_STOPPED' });
-      } catch {}
+      } catch { }
     }
   };
 
@@ -508,6 +607,7 @@ export function adbStopLogcat(webview?: any): void {
  * UI event’leri:
  *  - { type: 'ADB_LOGCAT_STARTED', device, buffers, level }
  *  - { type: 'ADB_LOG', line }
+ *  - { type: 'ADB_LOG_BATCH', lines }
  *  - { type: 'ADB_LOG_ERROR', error }
  *  - { type: 'ADB_LOGCAT_EXIT', code, signal }
  */
@@ -557,6 +657,13 @@ export function adbStartLogcat(
     }
 
     currentLogcat = child;
+    adbLogBuffer = new LogBuffer((lines) => {
+      try {
+        webview.postMessage({ type: 'ADB_LOG_BATCH', lines });
+      } catch {
+        console.error('Failed to send ADB_LOG_BATCH message');
+      }
+    });
 
     // UI’a started
     try {
@@ -570,6 +677,7 @@ export function adbStartLogcat(
       console.error('Failed to send ADB_LOGCAT_STARTED message');
     }
 
+    let lineBuf = '';
     // stdout -> line by line
     child.stdout.on('data', (chunk: Buffer) => {
       lineBuf += chunk.toString('utf8');
@@ -577,11 +685,7 @@ export function adbStartLogcat(
       lineBuf = lines.pop() ?? '';
       for (const line of lines) {
         if (!line) continue;
-        try {
-          webview.postMessage({ type: 'ADB_LOG', line });
-        } catch {
-          console.error('Failed to send ADB_LOG message:', line);
-        }
+        adbLogBuffer?.add(line);
       }
     });
 
@@ -607,6 +711,7 @@ export function adbStartLogcat(
     });
 
     child.on('close', (code, signal) => {
+      adbLogBuffer?.flush();
       try {
         webview.postMessage({ type: 'ADB_LOGCAT_EXIT', code, signal });
       } catch {
@@ -664,23 +769,28 @@ function killProcessHard(p: ChildProcessWithoutNullStreams) {
  * description: Stops the iOS simulator log stream if it is running.
  */
 export function simulatorStopLog(webview?: any): void {
+  // Clear buffer
+  if (iosLogBuffer) {
+    iosLogBuffer.clear();
+    iosLogBuffer = null;
+  }
+
   const p = currentSimulatorLog;
   if (!p || p.killed) {
     // Already stopped or no process running
     try {
       webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
-    } catch {}
+    } catch { }
     return;
   }
 
   currentSimulatorLog = null;
-  iosLineBuf = '';
 
   // Set up a listener for when the process actually closes
   const handleClose = () => {
     try {
       webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
-    } catch {}
+    } catch { }
   };
 
   // If process closes naturally, send stopped message
@@ -688,7 +798,7 @@ export function simulatorStopLog(webview?: any): void {
 
   try {
     p.kill();
-  } catch {}
+  } catch { }
 
   // Fallback: force kill after timeout and send message
   setTimeout(() => {
@@ -698,7 +808,7 @@ export function simulatorStopLog(webview?: any): void {
       p.removeListener('close', handleClose);
       try {
         webview?.postMessage?.({ type: 'IOS_LOG_STOPPED' });
-      } catch {}
+      } catch { }
     }
   }, 600);
 }
@@ -708,6 +818,7 @@ export function simulatorStopLog(webview?: any): void {
  * UI events:
  *  - { type: 'IOS_LOG_STARTED', device, appName }
  *  - { type: 'IOS_LOG', line }
+ *  - { type: 'IOS_LOG_BATCH', lines }
  *  - { type: 'IOS_LOG_ERROR', error }
  *  - { type: 'IOS_LOG_EXIT', code, signal }
  */
@@ -765,6 +876,13 @@ export function simulatorStartLog(
   }
 
   currentSimulatorLog = child;
+  iosLogBuffer = new LogBuffer((lines) => {
+    try {
+      webview.postMessage({ type: 'IOS_LOG_BATCH', lines });
+    } catch {
+      console.error('Failed to send IOS_LOG_BATCH message');
+    }
+  });
 
   // Send started message to UI
   try {
@@ -777,6 +895,8 @@ export function simulatorStartLog(
     console.error('Failed to send IOS_LOG_STARTED message');
   }
 
+  let iosLineBuf = '';
+
   // Handle stdout - line by line
   child.stdout.on('data', (chunk: Buffer) => {
     iosLineBuf += chunk.toString('utf8');
@@ -784,11 +904,7 @@ export function simulatorStartLog(
     iosLineBuf = lines.pop() ?? '';
     for (const line of lines) {
       if (!line) continue;
-      try {
-        webview.postMessage({ type: 'IOS_LOG', line });
-      } catch {
-        console.error('Failed to send IOS_LOG message:', line);
-      }
+      iosLogBuffer?.add(line);
     }
   });
 

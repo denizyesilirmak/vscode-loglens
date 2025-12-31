@@ -1,14 +1,9 @@
+import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { format } from 'date-fns';
 import { IosLogEntry } from '../../store/iosLogStore';
+import { ArrowDownCircleIcon } from '@heroicons/react/24/solid';
 import './style.css';
-import { useEffect, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-
-const columns = [
-  { name: 'Time', width: '15%' },
-  { name: 'Process', width: '15%' },
-  { name: 'Message', width: '70%' },
-];
 
 interface SimulatorLogsProps {
   logs: IosLogEntry[];
@@ -16,121 +11,144 @@ interface SimulatorLogsProps {
 }
 
 const SimulatorLogs: React.FC<SimulatorLogsProps> = ({ logs, keyword = '' }) => {
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const parentalRef = useRef<HTMLDivElement>(null);
+  const isStickyRef = useRef(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
+  // Filter logs if keyword exists
   const filteredLogs = keyword
     ? logs.filter(
-        (log) =>
-          log.Message.toLowerCase().includes(keyword.toLowerCase()) ||
-          log.Process.toLowerCase().includes(keyword.toLowerCase()),
-      )
+      (log) =>
+        log.Message.toLowerCase().includes(keyword.toLowerCase()) ||
+        log.Process.toLowerCase().includes(keyword.toLowerCase()),
+    )
     : logs;
 
   const rowVirtualizer = useVirtualizer({
     count: filteredLogs.length,
-    getScrollElement: () => logEndRef.current,
-    estimateSize: () => 80,
-    enabled: true,
+    getScrollElement: () => parentalRef.current,
+    estimateSize: () => 24,
+    overscan: 20,
   });
 
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
+  const scrollToBottom = useCallback(() => {
+    if (!parentalRef.current) return;
+    try {
+      rowVirtualizer.scrollToIndex(filteredLogs.length - 1, { align: 'end' });
+      isStickyRef.current = true;
+      setShowScrollButton(false);
+    } catch (e) {
+      console.error("Scroll error", e);
+    }
+  }, [filteredLogs.length, rowVirtualizer]);
+
+  useLayoutEffect(() => {
+    if (isStickyRef.current) {
+      scrollToBottom();
+    }
+  }, [filteredLogs.length, scrollToBottom]);
+
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+
+    if (distanceToBottom < 20) {
+      isStickyRef.current = true;
+      setShowScrollButton(false);
+    } else {
+      if (isStickyRef.current && distanceToBottom > 50) {
+        isStickyRef.current = false;
+        setShowScrollButton(true);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    if (keyword && keyword.trim() !== '') {
-      return;
+    if (filteredLogs.length > 0) {
+      scrollToBottom();
     }
-
-    if (
-      rowVirtualizer.scrollOffset &&
-      rowVirtualizer.scrollOffset >= rowVirtualizer.getTotalSize() * 0.9
-    ) {
-      console.log('anan');
-      rowVirtualizer.scrollToOffset(rowVirtualizer.getTotalSize());
-    }
-  }, [filteredLogs.length, keyword, rowVirtualizer]);
-
-  const items = rowVirtualizer.getVirtualItems();
+  }, []);
 
   return (
-    <div className="logcat-container" ref={logEndRef}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            {columns.map((col) => (
-              <th
-                key={col.name}
-                style={{
-                  width: col.width,
-                  textAlign: 'left',
-                  borderBottom: '1px solid var(--border)',
-                  padding: '8px',
-                }}
-              >
-                {col.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody
+    <div className="logcat-container">
+      <div
+        ref={parentalRef}
+        onScroll={onScroll}
+        style={{
+          height: '100%',
+          overflowY: 'auto',
+          contain: 'strict',
+        }}
+      >
+        <div
           style={{
-            position: 'relative',
             height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              transform: `translateY(${items[0]?.start || 0}px)`,
-            }}
-          >
-            {items.map((virtualRow) => {
-              const log = filteredLogs[virtualRow.index];
-              if (!log) return null;
-              return (
-                <div
-                  key={virtualRow.index}
-                  data-index={virtualRow.index}
-                  ref={rowVirtualizer.measureElement}
-                >
-                  <LogListItem key={virtualRow.index} log={log} keyword={keyword} />
+          {virtualItems.map((virtualRow) => {
+            const log = filteredLogs[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                className="log-row"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <div className="col-time">
+                  {log.Time ? format(new Date(log.Time), 'HH:mm:ss.SSS') : ''}
                 </div>
-              );
-            })}
-          </div>
-        </tbody>
-      </table>
+                <div className="col-process" title={log.Process}>
+                  {log.Process}
+                </div>
+                <div className="col-msg">
+                  <Highlight text={log.Message} keyword={keyword} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {showScrollButton && (
+        <button
+          className="scroll-bottom-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            scrollToBottom();
+          }}
+          title="Resume Auto-Scroll"
+        >
+          <ArrowDownCircleIcon style={{ width: 24, height: 24 }} />
+        </button>
+      )}
     </div>
   );
 };
 
-const LogListItem: React.FC<{ log: IosLogEntry; keyword: string }> = ({ log, keyword }) => {
+const Highlight = ({ text, keyword }: { text: string; keyword: string }) => {
+  if (!keyword) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${keyword})`, 'gi'));
   return (
-    <tr>
-      <td style={{ padding: '8px', fontSize: '12px', color: '#888' }}>
-        {format(new Date(log.Time), 'HH:mm:ss')}
-      </td>
-      <td style={{ padding: '8px', fontSize: '12px', fontWeight: 'bold' }}>{log.Process}</td>
-      <td style={{ padding: '8px' }}>
-        {log.Category && (
-          <span style={{ color: '#007acc', fontSize: '11px', marginRight: '8px' }}>
-            [{log.Category}]
-          </span>
-        )}
-        {keyword && keyword.trim() ? (
-          <span
-            dangerouslySetInnerHTML={{
-              __html: log.Message.replace(
-                new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                '<mark style="background-color: yellow; color: black;">$1</mark>',
-              ),
-            }}
-          />
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <span key={i} style={{ backgroundColor: 'var(--vscode-editor-findMatchHighlightBackground)', color: 'inherit' }}>{part}</span>
         ) : (
-          log.Message
-        )}
-      </td>
-    </tr>
+          part
+        )
+      )}
+    </span>
   );
 };
 

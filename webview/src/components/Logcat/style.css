@@ -2,24 +2,145 @@
     flex: 1;
     border: 1px solid var(--border);
     border-top: none;
-    background-color: var(--background-secondary);
-    color: var(--text-primary);
-    overflow-y: auto;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    position: relative;
+    /* For floating button positioning */
+    overflow: hidden;
+    /* Container itself shouldn't scroll, the virtualizer div will */
     contain: strict;
 }
 
-.logcat-container .level-error{
-    background-color: rgba(255, 0, 0, 0.08) !important;
+/* Scroll to Bottom Button */
+.scroll-bottom-btn {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    opacity: 0.9;
+    transition: opacity 0.2s, transform 0.2s;
 }
 
-.logcat-container .level-warn{
-    background-color: rgba(255, 165, 0, 0.08) !important;
+.scroll-bottom-btn:hover {
+    background-color: var(--vscode-button-hoverBackground);
+    opacity: 1;
+    transform: scale(1.05);
 }
 
-.logcat-container .level-info{
-    background-color: rgba(0, 0, 255, 0.00) !important;
+/* Log Rows - Grid Layout */
+.log-row {
+    display: grid;
+    /* Grid Columns: Time | Level | Tag | PID | Message */
+    grid-template-columns: 85px 35px 140px 70px 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 4px 8px;
+    line-height: 1.5;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
+    font-size: 13px;
+    font-family: var(--vscode-editor-font-family, monospace);
 }
 
-.logcat-container .level-debug{
-    background-color: rgba(0, 255, 0, 0.08) !important;
+.log-row:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Col specific styling */
+.col-time {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.col-level {
+    font-weight: bold;
+    text-align: center;
+}
+
+.col-tag {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.col-pid {
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.col-msg {
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+/* Level Colors */
+.level-V {
+    color: var(--vscode-editor-foreground);
+}
+
+.level-D {
+    color: #569CD6;
+}
+
+.level-I {
+    color: #C586C0;
+}
+
+.level-I .tag-I {
+    color: #4CAF50;
+}
+
+.level-W {
+    color: #DAA520;
+    background-color: rgba(218, 165, 32, 0.1);
+}
+
+.level-E {
+    color: #F44336;
+    background-color: rgba(244, 67, 54, 0.15);
+}
+
+.level-F {
+    color: #FF0000;
+    font-weight: bold;
+    background-color: rgba(255, 0, 0, 0.2);
+}
+
+.tag-V {
+    color: #BBBBBB;
+}
+
+.tag-D {
+    color: #569CD6;
+}
+
+.tag-I {
+    color: #4CAF50;
+}
+
+.tag-W {
+    color: #DAA520;
+}
+
+.tag-E {
+    color: #F44336;
+}
+
+.tag-F {
+    color: #FF0000;
 }

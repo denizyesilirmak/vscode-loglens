@@ -8,6 +8,7 @@ export interface LogEntry {
   PID: string;
   ProcessName?: string; // Process name resolved from PID
   TID?: string;
+  Level?: string; // Added Level
   Tag: string;
   Message: string;
 }
@@ -19,7 +20,7 @@ interface LogcatState {
   startLogcat: (options: { device: string; level?: string; buffer?: string }) => void;
   stopLogcat: () => void;
   clearLogs: () => void;
-  addLog: (log: LogEntry) => void;
+  addLog: (logs: LogEntry | LogEntry[]) => void;
   setRunning: (running: boolean) => void;
   setLoading: (loading: boolean) => void;
 }
@@ -28,13 +29,10 @@ declare const vscode: {
   postMessage: (msg: unknown) => void;
 };
 
-interface LogMessage {
-  type: 'ADB_LOG';
-  line: string;
-  processName?: string;
-}
+// Removed unused LogMessage interface
 
-const MAX_LOGS = 200;
+const MAX_LOGS = 50000; // Increased limit for visualization
+const BATCH_SIZE_LIMIT = 1000;
 
 export const useLogcatStore = create<LogcatState>((set) => ({
   logs: [],
@@ -48,11 +46,8 @@ export const useLogcatStore = create<LogcatState>((set) => ({
 
   stopLogcat: () => {
     console.log('stopLogcat called - sending ADB_STOP_LOGCAT message');
-    // İlk önce frontend'te durdur
     set({ running: false, loading: false });
-    // Sonra backend'e mesaj gönder
     vscode.postMessage({ type: 'ADB_STOP_LOGCAT' });
-    // Log'ları da temizle
     setTimeout(() => {
       set({ logs: [] });
     }, 100);
@@ -60,10 +55,48 @@ export const useLogcatStore = create<LogcatState>((set) => ({
 
   clearLogs: () => set({ logs: [] }),
 
-  addLog: (log) =>
+  addLog: (newLogs) =>
     set((state) => {
-      const newLogs = [...state.logs, log];
-      return { logs: newLogs.slice(-MAX_LOGS) }; // son 200
+      const incoming = Array.isArray(newLogs) ? newLogs : [newLogs];
+      if (incoming.length === 0) return {};
+
+      // We need to work with a copy to mutate safely if we merge into the last element
+      const currentLogs = [...state.logs];
+
+      for (const log of incoming) {
+        const lastLog = currentLogs[currentLogs.length - 1];
+
+        // Check for merge capability
+        // Matching: PID, TID (if exists), Tag, Level
+        // We rely on consistent properties. 
+        if (
+          lastLog &&
+          lastLog.PID === log.PID &&
+          lastLog.Tag === log.Tag &&
+          lastLog.Level === log.Level &&
+          lastLog.TID === log.TID
+        ) {
+          // Merge: Append message with newline
+          // We must create a new object for the last log to trigger React updates (immutability) if we were just replacing it, 
+          // but since we are replacing the whole 'logs' array in the store, mutating the local 'lastLog' reference within 'currentLogs' is fine 
+          // AS LONG AS 'lastLog' is a copy or we treat it carefully. 
+          // Actually, 'lastLog' is a reference to an object in 'state.logs'. Mutating it directly is bad practice in Zustand/Redux.
+          // Let's replace the last log with a merged version.
+
+          currentLogs[currentLogs.length - 1] = {
+            ...lastLog,
+            Message: lastLog.Message + '\n' + log.Message
+          };
+        } else {
+          currentLogs.push(log);
+        }
+      }
+
+      // Trim if too large
+      if (currentLogs.length > MAX_LOGS) {
+        return { logs: currentLogs.slice(-MAX_LOGS) };
+      }
+      return { logs: currentLogs };
     }),
 
   setRunning: (running) => set({ running }),
@@ -87,26 +120,34 @@ export function useLogcat() {
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const message = event.data;
-      console.log('Received message:', message.type); // DEBUG: tüm mesajları logla
+      // console.log('Received message:', message.type); 
       switch (message.type) {
         case 'ADB_LOG': {
-          // Eğer running false ise yeni log ekleme!
-          if (!useLogcatStore.getState().running) {
-            console.log('Ignoring ADB_LOG because running is false');
-            break;
-          }
-
+          if (!useLogcatStore.getState().running) break;
           const parsed = parseLogLine(message.line);
           if (parsed) {
-            // Debug log to see if process names are being received
-            if (message.processName) {
-              console.log(`Process name for PID ${parsed.PID}: ${message.processName}`);
-            }
-            const logEntry: LogEntry = {
+            addLog({
               ...parsed,
               ProcessName: message.processName,
-            };
-            addLog(logEntry);
+            });
+          }
+          break;
+        }
+        case 'ADB_LOG_BATCH': {
+          if (!useLogcatStore.getState().running) break;
+          const lines = message.lines as string[];
+          const parsedBatch: LogEntry[] = [];
+
+          for (const line of lines) {
+            const parsed = parseLogLine(line);
+            if (parsed) {
+              // We don't get processName per line in batch easily unless parsed from line or passed separately
+              // For now assuming processName is not attached to every line in batch mode from backend yet
+              parsedBatch.push(parsed as LogEntry);
+            }
+          }
+          if (parsedBatch.length > 0) {
+            addLog(parsedBatch);
           }
           break;
         }
@@ -123,7 +164,6 @@ export function useLogcat() {
           console.log('Received ADB_LOGCAT_STOPPED - setting running to false and clearing logs');
           setRunning(false);
           setLoading(false);
-          // KRITIK: Stop edildiğinde log'ları temizle!
           clearLogs();
           break;
         }

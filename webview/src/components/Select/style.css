@@ -1,17 +1,24 @@
 .select {
-    background: var(--background);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 14px;
+    background: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    border: 1px solid var(--vscode-dropdown-border);
+    border-radius: 2px;
+    padding: 2px 4px;
+    font-size: 13px;
     outline: none;
+    height: 24px;
+    max-width: 100%;
+    min-width: 0;
+    /* Allow shrinking below content size */
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+    /* WIP: standard select elements don't support ellipsis well across browsers but good attempt */
 }
 
 .select:focus {
-    outline: none;
+    border-color: var(--vscode-focusBorder);
 }
 
 .select:hover {
-    border-color: var(--hover-border);
+    /* Standard VSCode behavior */
 }

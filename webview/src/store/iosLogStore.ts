@@ -17,7 +17,7 @@ interface IosLogState {
   startIosLog: (options: { device: string; appName?: string }) => void;
   stopIosLog: () => void;
   clearLogs: () => void;
-  addLog: (log: IosLogEntry) => void;
+  addLog: (logs: IosLogEntry | IosLogEntry[]) => void; // Updated to accept array
   setRunning: (running: boolean) => void;
   setLoading: (loading: boolean) => void;
 }
@@ -26,7 +26,7 @@ declare const vscode: {
   postMessage: (msg: unknown) => void;
 };
 
-const MAX_LOGS = 200;
+const MAX_LOGS = 50000;
 
 export const useIosLogStore = create<IosLogState>((set) => ({
   logs: [],
@@ -40,18 +40,20 @@ export const useIosLogStore = create<IosLogState>((set) => ({
 
   stopIosLog: () => {
     console.log('stopIosLog called - sending IOS_STOP_LOG message');
-    // İlk önce frontend'te durdur
     set({ running: false, loading: false });
-    // Sonra backend'e mesaj gönder
     vscode.postMessage({ type: 'IOS_STOP_LOG' });
   },
 
   clearLogs: () => set({ logs: [] }),
 
-  addLog: (log) =>
+  addLog: (newLogs) =>
     set((state) => {
-      const newLogs = [...state.logs, log];
-      return { logs: newLogs.slice(-MAX_LOGS) }; // keep last 200
+      const incoming = Array.isArray(newLogs) ? newLogs : [newLogs];
+      const updated = state.logs.concat(incoming);
+      if (updated.length > MAX_LOGS) {
+        return { logs: updated.slice(-MAX_LOGS) };
+      }
+      return { logs: updated };
     }),
 
   setRunning: (running) => set({ running }),
@@ -77,13 +79,22 @@ export function useIosLog() {
       const message = event.data;
       switch (message.type) {
         case 'IOS_LOG': {
-          if (!useIosLogStore.getState().running) {
-            console.log('Ignoring IOS_LOG because running is false');
-            break;
-          }
-
+          if (!useIosLogStore.getState().running) break;
           const parsed = parseIosLogLine(message.line);
           if (parsed) addLog(parsed);
+          break;
+        }
+        case 'IOS_LOG_BATCH': {
+          if (!useIosLogStore.getState().running) break;
+          const lines = message.lines as string[];
+          const parsedBatch: IosLogEntry[] = [];
+          for (const line of lines) {
+            const parsed = parseIosLogLine(line);
+            if (parsed) parsedBatch.push(parsed);
+          }
+          if (parsedBatch.length > 0) {
+            addLog(parsedBatch);
+          }
           break;
         }
         case 'IOS_LOG_ERROR': {

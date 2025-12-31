@@ -16,6 +16,7 @@ import {
   adbStopLogcat,
   simulatorStartLog,
   simulatorStopLog,
+  adbGetProcesses,
 } from './utils/device';
 
 export type WebviewRequest =
@@ -24,6 +25,7 @@ export type WebviewRequest =
   | { type: 'GET_ADB_PATH' }
   | { type: 'GET_ADB_VERSION' }
   | { type: 'GET_ADB_DEVICES' }
+  | { type: 'GET_ADB_PROCESSES'; deviceId: string }
   | { type: 'GET_ANDROID_AVDS' }
   | { type: 'GET_CHECK_XCODE_INSTALLED' }
   | { type: 'GET_XCODE_PATH' }
@@ -57,15 +59,16 @@ export type WebviewResponse =
   | { type: 'PONG' }
   | { type: 'ERROR'; error: string }
   | {
-      type: 'ENV_RESULT';
-      payload: { kind: 'android'; adb: AndroidEnv } | { kind: 'ios'; xcode: IosEnv };
-    };
+    type: 'ENV_RESULT';
+    payload: { kind: 'android'; adb: AndroidEnv } | { kind: 'ios'; xcode: IosEnv };
+  }
+  | { type: 'ADB_PROCESSES_LIST'; processes: { pid: string; name: string }[] };
 
 const RAW_DEV_SERVER = (process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173').replace(
   /\/+$/,
   '',
 );
-const IS_DEV = Boolean(process.env.VITE_DEV_SERVER_URL) || process.env.NODE_ENV === 'development';
+const IS_DEV = false; // Forced to false for stability and to use the built 'dist'
 
 function nonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -97,7 +100,7 @@ class MobileLogsProvider implements vscode.WebviewViewProvider {
     private readonly viewId: 'mobileLogs_adb' | 'mobileLogs_ios',
     private readonly label: 'Android Logs' | 'iOS Logs',
     private readonly ctx: vscode.ExtensionContext,
-  ) {}
+  ) { }
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
     const { webview } = webviewView;
@@ -160,6 +163,24 @@ class MobileLogsProvider implements vscode.WebviewViewProvider {
             webview.postMessage({
               avds: avds,
             });
+            break;
+          }
+          case 'GET_ADB_PROCESSES': {
+            // @ts-ignore
+            const deviceId = msg.deviceId;
+            try {
+              const processes = adbGetProcesses(deviceId);
+              webview.postMessage({
+                type: 'ADB_PROCESSES_LIST',
+                processes: processes
+              });
+            } catch (e) {
+              console.error('Error getting processes:', e);
+              webview.postMessage({
+                type: 'ERROR',
+                error: (e as Error).message
+              });
+            }
             break;
           }
           case 'GET_CHECK_XCODE_INSTALLED': {
@@ -351,4 +372,4 @@ export function activate(ctx: vscode.ExtensionContext): void {
   );
 }
 
-export function deactivate(): void {}
+export function deactivate(): void { }
