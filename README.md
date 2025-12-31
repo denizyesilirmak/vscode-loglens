@@ -12,6 +12,8 @@ LogLens brings native Android and iOS device logging directly into VS Code. Debu
 
 Whether you're testing on physical devices or simulators, LogLens streamlines the mobile debugging workflow into a single, focused interface.
 
+![LogLens Icon](media/screenshot.png)
+
 ## Core Features
 
 **Android Support**
@@ -70,16 +72,6 @@ No additional configuration needed—the extension auto-detects your development
 2. (Optional) Filter logs to a specific app bundle identifier
 3. Monitor streaming simulator output in real-time
 4. Use search to narrow results
-
-### Color Legend
-
-| Level | Color | Meaning |
-|-------|-------|---------|
-| Error | Red | Critical failures requiring attention |
-| Warning | Yellow | Potential issues that may need investigation |
-| Info | Blue | Standard application events |
-| Debug | Green | Detailed diagnostic information |
-| Verbose | Gray | Low-level system details |
 
 ## Troubleshooting
 

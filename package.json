@@ -1,9 +1,10 @@
 {
   "name": "loglens",
-  "displayName": "loglens",
+  "displayName": "LogLens - Mobile Log Viewer",
   "publisher": "denizyesilirmak",
   "description": "View Android adb logcat and iOS Simulator logs side-by-side directly inside VS Code. Filter, color-highlight, and manage device logs without leaving your editor.",
-  "version": "0.0.2",
+  "version": "1.0.0",
+  "icon": "media/loglens-icon.png",
   "engines": {
     "vscode": "^1.103.0"
   },
